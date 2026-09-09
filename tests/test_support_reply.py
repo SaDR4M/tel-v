@@ -19,7 +19,10 @@ class SupportReplyHandlerTest(unittest.IsolatedAsyncioTestCase):
             message_id=40,
             reply=AsyncMock(),
         )
-        bot = SimpleNamespace(copy_message=AsyncMock())
+        bot = SimpleNamespace(
+            send_message=AsyncMock(),
+            copy_message=AsyncMock(),
+        )
 
         with (
             patch.object(docs_support.settings, "ADMIN_CHAT_ID", 20),
@@ -36,5 +39,9 @@ class SupportReplyHandlerTest(unittest.IsolatedAsyncioTestCase):
             chat_id=50,
             from_chat_id=20,
             message_id=40,
+        )
+        bot.send_message.assert_awaited_once_with(
+            chat_id=50,
+            text="👤 <b>پیام از پشتیبانی</b>",
         )
         message.reply.assert_awaited_once_with("✅ پاسخ برای کاربر ارسال شد.")

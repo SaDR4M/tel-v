@@ -84,6 +84,10 @@ async def forward_admin_support_reply(message: Message, bot: Bot):
         return
 
     try:
+        await bot.send_message(
+            chat_id=user_telegram_id,
+            text="👤 <b>پیام از پشتیبانی</b>",
+        )
         await bot.copy_message(
             chat_id=user_telegram_id,
             from_chat_id=message.chat.id,

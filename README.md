@@ -5,7 +5,7 @@ A Telegram bot with 4 menu buttons:
 1. **Price List / Purchase** — browse plans, "pay" manually, upload receipt → admin approves → account auto-created on the panel
 2. **My Subscription** — live status/usage pulled from the panel API
 3. **How to Use** — static setup guide for common VPN clients
-4. **Support** — forwards user messages to your admin chat; configured admins can reply to the forwarded request and the bot delivers that reply to the user
+4. **Support** — forwards user messages to your admin chat; configured admins can reply to the forwarded request and the bot delivers that reply to the user, clearly marked as a support message
 
 Built with **aiogram 3** + **SQLite** (no external DB needed). Payments are handled manually: the user sends a receipt screenshot, an admin taps Approve/Reject, and on approval the bot calls the panel API to create the account.
 
