@@ -1,0 +1,48 @@
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.utils.keyboard import InlineKeyboardBuilder
+from config import settings
+
+
+def main_menu() -> InlineKeyboardMarkup:
+    b = InlineKeyboardBuilder()
+    b.button(text="💳 لیست قیمت / خرید اشتراک", callback_data="menu:plans")
+    b.button(text="🎁 اشتراک تست رایگان", callback_data="menu:test")
+    b.button(text="📱 اشتراک من", callback_data="menu:mysub")
+    b.button(text="📖 راهنمای استفاده", callback_data="menu:docs")
+    b.button(text="🆘 پشتیبانی", callback_data="menu:support")
+    b.adjust(1)
+    return b.as_markup()
+
+
+def plans_menu() -> InlineKeyboardMarkup:
+    b = InlineKeyboardBuilder()
+    for plan in settings.PLANS:
+        b.button(
+            text=f"{plan['name']} — {plan['price']} {settings.CURRENCY}",
+            callback_data=f"buy:{plan['id']}",
+        )
+    b.button(text="⬅️ بازگشت", callback_data="menu:home")
+    b.adjust(1)
+    return b.as_markup()
+
+
+def confirm_purchase(plan_id: str) -> InlineKeyboardMarkup:
+    b = InlineKeyboardBuilder()
+    b.button(text="✅ پرداخت کردم، رسید را ارسال می‌کنم", callback_data=f"payflow:{plan_id}")
+    b.button(text="⬅️ بازگشت", callback_data="menu:plans")
+    b.adjust(1)
+    return b.as_markup()
+
+
+def admin_review_keyboard(order_id: int) -> InlineKeyboardMarkup:
+    b = InlineKeyboardBuilder()
+    b.button(text="✅ تایید", callback_data=f"admin_approve:{order_id}")
+    b.button(text="❌ رد", callback_data=f"admin_reject:{order_id}")
+    b.adjust(2)
+    return b.as_markup()
+
+
+def back_home() -> InlineKeyboardMarkup:
+    b = InlineKeyboardBuilder()
+    b.button(text="⬅️ بازگشت به منو", callback_data="menu:home")
+    return b.as_markup()
