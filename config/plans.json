@@ -1,0 +1,51 @@
+[
+  {
+    "id": "plan_1m_10gb",
+    "name": "10 گیگابایت / 30 روز",
+    "price": "50000",
+    "data_limit_bytes": 10737418240,
+    "duration_days": 30
+  },
+  {
+    "id": "plan_1m_15gb",
+    "name": "15 گیگابایت / 30 روز",
+    "price": "75000",
+    "data_limit_bytes": 16106127360,
+    "duration_days": 30
+  },
+  {
+    "id": "plan_1m_25gb",
+    "name": "25 گیگابایت / 30 روز",
+    "price": "125000",
+    "data_limit_bytes": 26843545600,
+    "duration_days": 30
+  },
+  {
+    "id": "plan_1m_50gb",
+    "name": "50 گیگابایت / 30 روز",
+    "price": "240000",
+    "data_limit_bytes": 53687091200,
+    "duration_days": 30
+  },
+  {
+    "id": "plan_1m_80gb",
+    "name": "80 گیگابایت / 30 روز",
+    "price": "360000",
+    "data_limit_bytes": 85899345920,
+    "duration_days": 30
+  },
+  {
+    "id": "plan_1m_100gb",
+    "name": "100 گیگابایت / 30 روز",
+    "price": "450000",
+    "data_limit_bytes": 107374182400,
+    "duration_days": 30
+  },
+  {
+    "id": "plan_1m_200gb",
+    "name": "200 گیگابایت / 30 روز",
+    "price": "850000",
+    "data_limit_bytes": 214748364800,
+    "duration_days": 30
+  }
+]
