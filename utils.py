@@ -1,5 +1,5 @@
 import re
-from random import randint
+from aiogram.exceptions import TelegramBadRequest
 
 
 def sanitize_username(raw: str) -> str:
@@ -12,12 +12,19 @@ def sanitize_username(raw: str) -> str:
         cleaned = "user"
     return cleaned[:20]
 
-def random_number():
-    return randint(100000,9999999)
 
 def make_panel_username(raw: str, telegram_id: int) -> str:
-    """Combines a sanitized user-chosen name with random ID so it's
+    """Combines a sanitized user-chosen name with their Telegram ID so it's
     guaranteed unique on the panel even if two people pick the same name."""
-    print(telegram_id)
-    print(type(telegram_id))
-    return f"{sanitize_username(raw)}_{str(telegram_id)[:5] + str(random_number())}"
+    return f"{sanitize_username(raw)}_{telegram_id}"
+
+
+async def safe_edit_text(message, text, reply_markup=None):
+    """Edits a message's text, silently ignoring Telegram's harmless
+    'message is not modified' error (fires when a button is tapped twice
+    in a row and the resulting text/markup would be identical)."""
+    try:
+        await message.edit_text(text, reply_markup=reply_markup)
+    except TelegramBadRequest as e:
+        if "message is not modified" not in str(e).lower():
+            raise

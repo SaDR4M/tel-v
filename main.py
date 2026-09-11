@@ -9,7 +9,7 @@ from aiogram.types import BotCommand
 
 from config import settings
 import database as db
-from handlers import menu, purchase, admin_review, mysub, docs_support, test_plan
+from handlers import menu, purchase, admin_review, mysub, docs_support, test_plan, renewal
 
 logging.basicConfig(level=logging.INFO)
 
@@ -41,6 +41,7 @@ async def main():
     dp.include_router(mysub.router)
     dp.include_router(docs_support.router)
     dp.include_router(test_plan.router)
+    dp.include_router(renewal.router)
 
     await bot.set_my_commands(BOT_COMMANDS)
     await bot.delete_webhook(drop_pending_updates=True)

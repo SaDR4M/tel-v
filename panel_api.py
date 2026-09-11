@@ -6,10 +6,12 @@ If your panel's endpoints differ, this is the only file you should
 need to edit.
 """
 import time
+from logging import getLogger
 import uuid
 import aiohttp
 from config import settings
 
+logger = getLogger(__name__)
 
 class PanelAPIError(Exception):
     pass
@@ -56,6 +58,7 @@ class PanelClient:
         expire_ts = int(time.time()) + duration_days * 86400
         uid = str(uuid.uuid4())
 
+        logger.error(username)
         payload = {
             "username": username,
             "proxies": {
@@ -111,5 +114,36 @@ class PanelClient:
                     )
                 return await resp.json()
 
+
+    async def reset_user_usage(self, username: str) -> dict:
+        """Zeroes out a user's used_traffic counter without touching their
+        proxies/link. Marzban-style panels expose this as its own endpoint
+        rather than as a field on the modify_user payload."""
+        async with aiohttp.ClientSession() as session:
+            headers = await self._headers(session)
+            async with session.post(
+                f"{settings.PANEL_BASE_URL}/api/user/{username}/reset",
+                headers=headers,
+            ) as resp:
+                if resp.status != 200:
+                    raise PanelAPIError(
+                        f"Reset usage failed: {resp.status} {await resp.text()}"
+                    )
+                return await resp.json()
+
+    async def renew_user(self, username: str, data_limit_bytes: int, duration_days: int) -> dict:
+            """Extends an EXISTING user's expiry/data and resets their usage
+            counter, without regenerating proxies/UUIDs -- so the subscription
+            link the user already has keeps working unchanged."""
+            expire_ts = int(time.time()) + duration_days * 86400
+            await self.modify_user(
+                username,
+                expire=expire_ts,
+                data_limit=data_limit_bytes,
+                status="active",
+            )
+            await self.reset_user_usage(username)
+            # Re-fetch so the returned object reflects the reset usage too.
+            return await self.get_user(username)
 
 panel = PanelClient()

@@ -1,9 +1,8 @@
-
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 
 from config import settings
-from models import Base, User, Order, SupportMessage
+from models import Base, User, Order
 
 engine = create_async_engine(f"sqlite+aiosqlite:///{settings.DB_PATH}")
 SessionLocal = async_sessionmaker(engine, expire_on_commit=False)
@@ -44,7 +43,14 @@ async def get_panel_username(order_id: int) -> str | None:
         return order.panel_username if order else None
 
 
-async def create_order(telegram_id: int, plan_id: str, requested_username: str, receipt_file_id: str) -> int:
+async def create_order(
+    telegram_id: int,
+    plan_id: str,
+    requested_username: str,
+    receipt_file_id: str,
+    order_type: str = "purchase",
+    target_panel_username: str | None = None,
+) -> int:
     async with SessionLocal() as session:
         order = Order(
             telegram_id=telegram_id,
@@ -52,6 +58,8 @@ async def create_order(telegram_id: int, plan_id: str, requested_username: str, 
             requested_username=requested_username,
             receipt_file_id=receipt_file_id,
             status="pending",
+            order_type=order_type,
+            target_panel_username=target_panel_username,
         )
         session.add(order)
         await session.commit()
@@ -112,17 +120,20 @@ async def get_active_orders(telegram_id: int) -> list[dict]:
         ]
 
 
-async def create_support_message(admin_message_id: int, user_telegram_id: int):
+async def get_distinct_panel_usernames(telegram_id: int) -> list[str]:
+    """Returns the distinct panel usernames this telegram user has ever
+    had approved (covers both a purchase's panel_username and a renewal's
+    target_panel_username), most recently created first."""
     async with SessionLocal() as session:
-        support_message = SupportMessage(
-            admin_message_id=admin_message_id,
-            user_telegram_id=user_telegram_id,
+        result = await session.execute(
+            select(Order.panel_username, Order.target_panel_username)
+            .where(Order.telegram_id == telegram_id, Order.status == "approved")
+            .order_by(Order.created_at.desc())
         )
-        session.add(support_message)
-        await session.commit()
-
-
-async def get_support_message_user(admin_message_id: int) -> int | None:
-    async with SessionLocal() as session:
-        support_message = await session.get(SupportMessage, admin_message_id)
-        return support_message.user_telegram_id if support_message else None
+        rows = result.all()
+        seen: dict[str, None] = {}
+        for panel_username, target_panel_username in rows:
+            for candidate in (panel_username, target_panel_username):
+                if candidate and candidate not in seen:
+                    seen[candidate] = None
+        return list(seen.keys())

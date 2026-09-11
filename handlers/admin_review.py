@@ -8,6 +8,10 @@ from utils import make_panel_username
 
 router = Router()
 
+from logging import getLogger
+
+logger = getLogger(__name__)
+
 
 def _is_admin(user_id: int) -> bool:
     return user_id in settings.ADMIN_USER_IDS
@@ -27,47 +31,71 @@ async def cb_admin_approve(callback: CallbackQuery, bot: Bot):
 
     plan = settings.get_plan(order["plan_id"])
     telegram_id = order["telegram_id"]
+    is_renewal = order.get("order_type") == "renewal"
 
-    # Reuse an existing linked panel account if this user already has one
-    # (keeps renewals on the same account); otherwise derive the unique
-    # username from what they picked during checkout.
-    panel_username = await db.get_panel_username(order_id) or make_panel_username(
-        order["requested_username"], telegram_id
-    )
+    if is_renewal:
+        panel_username = order["target_panel_username"]
+        try:
+            user_obj = await panel.renew_user(
+                username=panel_username,
+                data_limit_bytes=plan["data_limit_bytes"],
+                duration_days=plan["duration_days"],
+            )
+        except PanelAPIError as e:
+            await callback.message.edit_caption(
+                caption=callback.message.caption + f"\n\n⚠️ خطای پنل: {e}"
+            )
+            await callback.answer("تمدید سرویس ناموفق بود — خطا را در بالا ببینید.", show_alert=True)
+            return
 
-    try:
-        user_obj = await panel.create_user(
-            username=panel_username,
-            telegram_id=telegram_id,
-            data_limit_bytes=plan["data_limit_bytes"],
-            duration_days=plan["duration_days"],
+        await db.link_panel_account(telegram_id, panel_username)
+        await db.set_order_status(order_id, "approved", panel_username)
+        sub_url = user_obj.get("subscription_url", "نامشخص")
+
+        await bot.send_message(
+            chat_id=telegram_id,
+            text=(
+                f"🎉 <b>تمدید با موفقیت انجام شد!</b>\n\n"
+                f"سرویس: <code>{panel_username}</code>\n"
+                f"پلن جدید: {plan['name']}\n\n"
+                f"لینک اشتراک شما تغییری نکرده و همچنان معتبر است."
+                f"لینک اشتراک:\n<code>{sub_url}</code>\n\n"
+            ),
         )
-    except PanelAPIError as e:
-        await callback.message.edit_caption(
-            caption=callback.message.caption + f"\n\n⚠️ خطای پنل: {e}"
+    else:
+        panel_username = await db.get_panel_username(telegram_id) or make_panel_username(
+            order["requested_username"], telegram_id
         )
-        await callback.answer("ایجاد کاربر در پنل ناموفق بود — خطا را در بالا ببینید.", show_alert=True)
-        return
+        logger.error(panel_username)
+        logger.error(await db.get_panel_username(telegram_id))
 
-    await db.link_panel_account(telegram_id, panel_username)
-    await db.set_order_status(order_id, "approved", panel_username)
+        try:
+            user_obj = await panel.create_user(
+                username=panel_username,
+                telegram_id=telegram_id,
+                data_limit_bytes=plan["data_limit_bytes"],
+                duration_days=plan["duration_days"],
+            )
+        except PanelAPIError as e:
+            await callback.message.edit_caption(
+                caption=callback.message.caption + f"\n\n⚠️ خطای پنل: {e}"
+            )
+            await callback.answer("ایجاد کاربر در پنل ناموفق بود — خطا را در بالا ببینید.", show_alert=True)
+            return
 
-    sub_url = user_obj.get("subscription_url", "نامشخص")
-    await bot.send_message(
-        chat_id=telegram_id,
-        text=(
-            f"🎉 <b>اشتراک شما آماده است!</b>\n\n"
-            f"پلن: {plan['name']}\n\n"
-            f"لینک اشتراک:\n<code>{sub_url}</code>\n\n"
-            f"برای راهنمای اتصال، /start → 📖 راهنمای استفاده را بزنید."
-        ),
-    )
+        await db.link_panel_account(telegram_id, panel_username)
+        await db.set_order_status(order_id, "approved", panel_username)
 
-    await callback.message.edit_caption(
-        caption=callback.message.caption + f"\n\n✅ تایید شد توسط {callback.from_user.first_name}"
-    )
-    await callback.answer("تایید شد.")
-
+        sub_url = user_obj.get("subscription_url", "نامشخص")
+        await bot.send_message(
+            chat_id=telegram_id,
+            text=(
+                f"🎉 <b>اشتراک شما آماده است!</b>\n\n"
+                f"پلن: {plan['name']}\n\n"
+                f"لینک اشتراک:\n<code>{sub_url}</code>\n\n"
+                f"برای راهنمای اتصال، /start → 📖 راهنمای استفاده را بزنید."
+            ),
+        )
 
 @router.callback_query(F.data.startswith("admin_reject:"))
 async def cb_admin_reject(callback: CallbackQuery, bot: Bot):
