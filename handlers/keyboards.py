@@ -1,4 +1,4 @@
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from config import settings
 
@@ -9,10 +9,48 @@ def main_menu() -> InlineKeyboardMarkup:
     b.button(text="🎁 اشتراک تست رایگان", callback_data="menu:test")
     b.button(text="📱 اشتراک من", callback_data="menu:mysub")
     b.button(text="📖 راهنمای استفاده", callback_data="menu:docs")
-    b.button(text="🆘 پشتیبانی", callback_data="menu:support")
+    b.button(text=" پشتیبانی", callback_data="menu:support")
     b.adjust(1)
     return b.as_markup()
 
+main_reply_keyboard = ReplyKeyboardMarkup(
+    keyboard=[
+        [
+            KeyboardButton(
+                text="اکانت تست",
+                style="primary",
+            ),
+            KeyboardButton(
+                text="خرید اشتراک جدید",
+                style="primary",
+            ),
+        ],
+        [
+            KeyboardButton(
+                text=" سرویس‌های من",
+                style="success",
+            ),
+            KeyboardButton(
+                text=" تمدید سرویس",
+                style="success",
+            ),
+        ],
+        [
+            KeyboardButton(
+                text="آموزش استفاده",
+                style="",
+            ),
+        ],
+        [
+            KeyboardButton(
+                text="پشتیبانی",
+                style="danger",
+            )
+        ]
+    ],
+    resize_keyboard=True,
+    is_persistent=True,
+)
 
 def plans_menu() -> InlineKeyboardMarkup:
     b = InlineKeyboardBuilder()

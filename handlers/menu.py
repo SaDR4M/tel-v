@@ -4,7 +4,7 @@ from aiogram.filters import CommandStart
 
 import database as db
 from config import settings
-from handlers.keyboards import main_menu
+from handlers.keyboards import main_menu, main_reply_keyboard
 
 router = Router()
 
@@ -16,7 +16,7 @@ WELCOME_TEXT = (
 @router.message(CommandStart())
 async def cmd_start(message: Message):
     await db.upsert_user(message.from_user.id, message.from_user.username)
-    await message.answer(WELCOME_TEXT, reply_markup=main_menu())
+    await message.answer(WELCOME_TEXT, reply_markup=main_reply_keyboard)
 
 
 @router.callback_query(F.data == "menu:home")

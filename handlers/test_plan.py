@@ -13,7 +13,8 @@ TEST_DATA_LIMIT_BYTES = 250 * 1024 * 1024  # 250 MB
 TEST_DURATION_DAYS = 1
 
 
-@router.callback_query(F.data == "menu:test")
+# @router.callback_query(F.data == "menu:test")
+@router.message(F.text == "اکانت تست")
 async def cb_apply_test(callback: CallbackQuery):
     # One test per Telegram account, ever.
     already_used = await db.has_used_plan(callback.from_user.id, TEST_PLAN_ID)
@@ -63,5 +64,4 @@ async def cb_apply_test(callback: CallbackQuery):
 
     # reply_markup=None removes the menu buttons entirely, so the chat
     # just shows this plain result — this is the "exit the menu" behavior.
-    await callback.message.edit_text(result_text, reply_markup=None)
-    await callback.answer()
+    await callback.answer(result_text, reply_markup=None)

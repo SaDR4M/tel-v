@@ -6,7 +6,7 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 import database as db
 from panel_api import panel, PanelAPIError
-from handlers.keyboards import back_home
+from handlers.keyboards import back_home, main_menu, plans_menu
 
 router = Router()
 
@@ -20,7 +20,7 @@ STATUS_LABELS = {
 
 def _fmt_bytes(n: int) -> str:
     if n == 0:
-        return "نامحدود"
+        return 0
     gb = n / 1_073_741_824
     return f"{gb:.2f} گیگابایت"
 
@@ -115,26 +115,26 @@ async def order_callback(callback: CallbackQuery):
     await callback.answer()
 
 
-@router.callback_query(F.data == "menu:mysub")
+# @router.callback_query(F.data == "menu:mysub")
+@router.message(F.text == "سرویس‌های من")
 async def mysub_callback(callback: CallbackQuery):
     orders = await db.get_active_orders(
         telegram_id=callback.from_user.id
     )
 
     if not orders:
-        await callback.message.edit_text(
-            "شما هنوز اشتراک فعالی ندارید.",
+        await callback.answer(
+            """
+            شما هنوز اشتراک فعالی ندارید
+            """,
+            reply_markup=plans_menu()
         )
-        await callback.answer()
         return
 
-    await callback.message.edit_text(
+    await callback.answer(
         "📦 اشتراک‌های فعال شما:",
         reply_markup=build_orders_keyboard(orders),
     )
-
-    await callback.answer()
-
 
 # @router.message(Command("mysub"))
 # async def cmd_mysub(message: Message):

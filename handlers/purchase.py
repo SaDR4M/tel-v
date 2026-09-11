@@ -18,13 +18,13 @@ class PurchaseFlow(StatesGroup):
     waiting_for_receipt = State()
 
 
-@router.callback_query(F.data == "menu:plans")
+# @router.callback_query(F.data == "menu:plans")
+@router.message(F.text == "خرید اشتراک جدید")
 async def cb_plans(callback: CallbackQuery):
-    await callback.message.edit_text(
+    await callback.answer(
         "📋 <b>پلن‌های موجود</b>\n\nیکی را انتخاب کنید:",
         reply_markup=plans_menu(),
     )
-    await callback.answer()
 
 
 @router.message(Command("plans"))
@@ -43,14 +43,14 @@ async def cb_buy(callback: CallbackQuery):
         await callback.answer("پلن یافت نشد.", show_alert=True)
         return
 
-    data_str = "نامحدود" if plan["data_limit_bytes"] == 0 else f"{plan['data_limit_bytes'] / 1_073_741_824:.0f} گیگابایت"
+    data_str = 0 if plan["data_limit_bytes"] == 0 else f"{plan['data_limit_bytes'] / 1_073_741_824:.0f} گیگابایت"
     text = (
         f"🧾 <b>{plan['name']}</b>\n\n"
         f"قیمت: <b>{plan['price']} {settings.CURRENCY}</b>\n"
         f"حجم: {data_str}\n"
         f"مدت: {plan['duration_days']} روز\n\n"
         f"مبلغ را به مشخصات زیر واریز کنید:\n\n"
-        f"💳 : <b>6219 8618 8648 5009</b>\n"
+        f"💳 : <b>6219 8610 8648 5009</b>\n"
         f"👤 : <b>صدرا آقاجانلو</b>\n\n"
         f"پس از واریز، رسید پرداخت را ارسال کنید."
     )
@@ -86,7 +86,7 @@ async def receive_username(message: Message, state: FSMContext):
 
     await message.answer(
         f"اشتراک شما با این نام ذخیره خواهد شد: <code>{final_username}</code>\n\n"
-        f"📎 حالا لطفاً عکس رسید پرداخت را ارسال کنید.",
+        f"📎 لطفاً عکس رسید پرداخت را ارسال کنید.",
         reply_markup=back_home(),
     )
 
