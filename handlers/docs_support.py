@@ -29,10 +29,11 @@ class SupportFlow(StatesGroup):
     waiting_for_message = State()
 
 
-@router.callback_query(F.data == "menu:docs")
+# @router.callback_query(F.data == "menu:docs")
+@router.message(F.text == "آموزش استفاده")
 async def cb_docs(callback: CallbackQuery):
-    await callback.message.edit_text(DOCS_TEXT, reply_markup=back_home())
-    await callback.answer()
+    # await callback.message.edit_text(DOCS_TEXT, reply_markup=back_home())
+    await callback.answer(DOCS_TEXT, reply_markup=back_home())
 
 
 @router.message(Command("docs"))
