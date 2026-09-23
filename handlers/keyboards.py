@@ -8,7 +8,7 @@ def main_menu() -> InlineKeyboardMarkup:
     b.button(text="💳 لیست قیمت / خرید اشتراک", callback_data="menu:plans")
     b.button(text="🎁 اشتراک تست رایگان", callback_data="menu:test")
     b.button(text="📱 اشتراک من", callback_data="menu:mysub")
-    b.button(text="🔄 تمدید سرویس", callback_data="menu:renew")
+    # b.button(text="🔄 تمدید سرویس", callback_data="menu:renew")
     b.button(text="📖 راهنمای استفاده", callback_data="menu:docs")
     b.button(text=" پشتیبانی", callback_data="menu:support")
     b.adjust(1)
@@ -31,10 +31,10 @@ main_reply_keyboard = ReplyKeyboardMarkup(
                 text=" سرویس‌های من",
                 style="success",
             ),
-            KeyboardButton(
-                text=" تمدید سرویس",
-                style="success",
-            ),
+            # KeyboardButton(
+            #     text=" تمدید سرویس",
+            #     style="success",
+            # ),
         ],
         [
             KeyboardButton(
