@@ -2,6 +2,13 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeybo
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from config import settings
 
+MENU_BUTTONS = (
+    "اکانت تست",
+    "خرید اشتراک جدید",
+    "سرویس‌های من",
+    "آموزش استفاده",
+    "پشتیبانی",
+)
 
 def main_menu() -> InlineKeyboardMarkup:
     b = InlineKeyboardBuilder()

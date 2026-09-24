@@ -7,8 +7,9 @@ from aiogram.fsm.state import State, StatesGroup
 import database as db
 from config import settings
 from utils import make_panel_username
-from handlers.keyboards import plans_menu, confirm_purchase, admin_review_keyboard, back_home
+from handlers.keyboards import plans_menu, confirm_purchase, admin_review_keyboard, back_home, MENU_BUTTONS
 from panel_api import panel, PanelAPIError
+from datetime import datetime, timedelta
 
 router = Router()
 
@@ -18,7 +19,6 @@ class PurchaseFlow(StatesGroup):
     waiting_for_receipt = State()
 
 
-# @router.callback_query(F.data == "menu:plans")
 @router.message(F.text == "خرید اشتراک جدید")
 async def cb_plans(callback: CallbackQuery):
     await callback.answer(
@@ -26,6 +26,13 @@ async def cb_plans(callback: CallbackQuery):
         reply_markup=plans_menu(),
     )
 
+@router.callback_query(F.data == "menu:plans")
+async def menu_plans(callback: CallbackQuery):
+    await callback.message.edit_text(
+        "📋 <b>پلن‌های موجود</b>\n\nیکی را انتخاب کنید:",
+        reply_markup=plans_menu(),
+    )
+    await callback.answer()
 
 @router.message(Command("plans"))
 async def cmd_plans(message: Message):
@@ -80,6 +87,12 @@ async def receive_username(message: Message, state: FSMContext):
         await message.answer("خیلی طولانی است — لطفاً کمتر از ۳۰ کاراکتر ارسال کنید.")
         return
 
+    # Check username to be not in the commands text
+    if raw in MENU_BUTTONS:
+        await message.answer("نام کاربری معتبر نمی باشد")
+        await state.clear()
+        return
+
     final_username = make_panel_username(raw, message.from_user.id)
     await state.update_data(requested_username=raw, panel_username=final_username)
     await state.set_state(PurchaseFlow.waiting_for_receipt)
@@ -103,13 +116,14 @@ async def receive_receipt(message: Message, state: FSMContext, bot: Bot):
     requested_username = data.get("requested_username")
     panel_username = data.get("panel_username")
     plan = settings.get_plan(plan_id)
+    expire_at = datetime.now() + timedelta(days=29)
     if not plan or not panel_username:
         await message.answer("مشکلی پیش آمد، لطفاً دوباره با /start شروع کنید.")
         await state.clear()
         return
 
     file_id = message.photo[-1].file_id
-    order_id = await db.create_order(message.from_user.id, plan_id, requested_username, file_id)
+    order_id = await db.create_order(telegram_id=message.from_user.id, plan_id=plan_id,  requested_username=requested_username, receipt_file_id=file_id, expire_at=expire_at)
     await state.clear()
 
     uname = f"@{message.from_user.username}" if message.from_user.username else str(message.from_user.id)

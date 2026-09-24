@@ -4,6 +4,7 @@ from aiogram.types import CallbackQuery
 
 import database as db
 from panel_api import panel, PanelAPIError
+from datetime import timedelta, datetime
 
 router = Router()
 logger = logging.getLogger(__name__)
@@ -30,6 +31,7 @@ async def cb_apply_test(callback: CallbackQuery):
     order_id = await db.create_order(
         telegram_id=callback.from_user.id,
         plan_id=TEST_PLAN_ID,
+        expire_at = datetime.now() + timedelta(days=1),
         requested_username=requested_username,
         receipt_file_id="test_plan_no_receipt",
     )

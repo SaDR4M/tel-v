@@ -16,6 +16,7 @@ from handlers.keyboards import (
     back_home,
 )
 from utils import safe_edit_text
+from datetime import datetime, timedelta
 
 router = Router()
 
@@ -136,6 +137,7 @@ async def receive_renewal_receipt(message: Message, state: FSMContext, bot: Bot)
     plan_id = data.get("plan_id")
     target_panel_username = data.get("target_panel_username")
     plan = settings.get_plan(plan_id)
+    expire_at = datetime.now() + timedelta(days=29)
     if not plan or not target_panel_username:
         await message.answer("مشکلی پیش آمد، لطفاً دوباره با /start شروع کنید.")
         await state.clear()
@@ -147,6 +149,7 @@ async def receive_renewal_receipt(message: Message, state: FSMContext, bot: Bot)
         plan_id=plan_id,
         requested_username=target_panel_username,
         receipt_file_id=file_id,
+        expire_at=expire_at,
         order_type="renewal",
         target_panel_username=target_panel_username,
     )
