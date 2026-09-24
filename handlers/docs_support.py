@@ -21,8 +21,11 @@ DOCS_TEXT = (
 
 \u200f📥 1. دانلود برنامه Sing-box
 \u200f📱 اندروید | Google Play
+\u200f https://play.google.com/store/apps/details?id=io.nekohasekai.sfa
 \u200f🍎 آیفون | App Store
+\u200f https://apps.apple.com/us/app/sing-box-mt/id6785326793
 \u200f💻 سایر نسخه‌ها | GitHub
+\u200f https://github.com/SagerNet/sing-box/releases
 
 \u200f⚙️ 2. افزودن کانفیگ
 \u200f➕ روی علامت + کلیک کنید.
