@@ -79,7 +79,8 @@ async def main():
         try:
             await monitor_task
         except asyncio.CancelledError:
-            pass  # Expected - we cancelled it
+            # pass  # Expected - we cancelled it
+            pass
 
 if __name__ == "__main__":
     asyncio.run(main())
