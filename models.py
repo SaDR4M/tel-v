@@ -30,3 +30,13 @@ class Order(Base):
     admin_message_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     panel_username: Mapped[str | None] = mapped_column(String, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    expire_at: Mapped[datetime] = mapped_column(DateTime)
+
+
+class Support(Base):
+    __tablename__ = "supports"
+
+    admin_message_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    from_user_id: Mapped[int] = mapped_column(Integer)
+    status: Mapped[str] = mapped_column(String, default="pending")
+

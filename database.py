@@ -2,7 +2,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 
 from config import settings
-from models import Base, User, Order
+from models import Base, User, Order, Support
+from datetime import datetime
 
 engine = create_async_engine(f"sqlite+aiosqlite:///{settings.DB_PATH}")
 SessionLocal = async_sessionmaker(engine, expire_on_commit=False)
@@ -48,6 +49,7 @@ async def create_order(
     plan_id: str,
     requested_username: str,
     receipt_file_id: str,
+    expire_at: datetime,
     order_type: str = "purchase",
     target_panel_username: str | None = None,
 ) -> int:
@@ -60,6 +62,7 @@ async def create_order(
             status="pending",
             order_type=order_type,
             target_panel_username=target_panel_username,
+            expire_at=expire_at
         )
         session.add(order)
         await session.commit()
@@ -110,7 +113,7 @@ async def get_active_orders(telegram_id: int) -> list[dict]:
     async with SessionLocal() as session:
         result = await session.execute(
             select(Order)
-            .where(Order.telegram_id == telegram_id, Order.status == "approved")
+            .where(Order.telegram_id == telegram_id, Order.status == "approved", Order.expire_at >= datetime.now())
             .order_by(Order.created_at.desc())
         )
         orders = result.scalars().all()
@@ -137,3 +140,25 @@ async def get_distinct_panel_usernames(telegram_id: int) -> list[str]:
                 if candidate and candidate not in seen:
                     seen[candidate] = None
         return list(seen.keys())
+
+
+async def create_support_message(message_id: int, from_user_id: int) -> int:
+    async with SessionLocal() as session:
+        support = Support(
+            admin_message_id=message_id,
+            from_user_id=from_user_id
+        )
+        session.add(support)
+        await session.commit()
+        await session.refresh(support)
+        return support.admin_message_id
+
+
+async def get_support_message_user(message_id: int) -> int:
+    async with SessionLocal() as session:
+        result = await session.execute(
+            select(Support.from_user_id)
+            .where(Support.admin_message_id == message_id, Support.status == "pending")
+        )
+        return result.scalar_one_or_none()
+
