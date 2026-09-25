@@ -115,7 +115,6 @@ async def order_callback(callback: CallbackQuery):
     await callback.answer()
 
 
-# @router.callback_query(F.data == "menu:mysub")
 @router.message(F.text == "سرویس‌های من")
 async def mysub_callback(callback: CallbackQuery):
     orders = await db.get_active_orders(
@@ -135,6 +134,29 @@ async def mysub_callback(callback: CallbackQuery):
         "📦 اشتراک‌های فعال شما:",
         reply_markup=build_orders_keyboard(orders),
     )
+
+
+@router.callback_query(F.data == "menu:mysub")
+async def mysub_menu_callback(callback: CallbackQuery):
+    orders = await db.get_active_orders(
+        telegram_id=callback.from_user.id
+    )
+
+    if not orders:
+        await callback.message.edit_text(
+            text="""
+            شما هنوز اشتراک فعالی ندارید
+            """,
+            reply_markup=plans_menu()
+        )
+        await callback.answer()
+        return
+
+    await callback.message.edit_text(
+        text="📦 اشتراک‌های فعال شما:",
+        reply_markup=build_orders_keyboard(orders),
+    )
+    await callback.answer()
 
 # @router.message(Command("mysub"))
 # async def cmd_mysub(message: Message):

@@ -75,12 +75,19 @@ async def _show_renewal_list(telegram_id: int):
     return text, renewable_subs_keyboard(subs)
 
 
-@router.callback_query(F.data == "menu:renew")
 @router.message(F.text == "تمدید سرویس")
 async def cb_renew_menu(callback: CallbackQuery):
     text, kb = await _show_renewal_list(callback.from_user.id)
     # await safe_edit_text(callback.message, text, reply_markup=kb)
     await callback.answer(text=text, reply_markup=kb)
+
+
+@router.callback_query(F.data == "menu:renew")
+async def cb_menu_renew_menu(callback: CallbackQuery):
+    text, kb = await _show_renewal_list(callback.from_user.id)
+    # await safe_edit_text(callback.message, text, reply_markup=kb)
+    await callback.message.edit_text(text=text, reply_markup=kb)
+    await callback.answer()
 
 
 @router.callback_query(F.data.startswith("renew_select:"))
