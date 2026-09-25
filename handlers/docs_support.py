@@ -90,11 +90,17 @@ async def _prompt_support(state: FSMContext) -> str:
     )
 
 
-# @router.callback_query(F.data == "menu:support")
 @router.message(F.text == "پشتیبانی")
 async def cb_support(callback: CallbackQuery, state: FSMContext):
     text = await _prompt_support(state)
     await callback.answer(text, reply_markup=back_home())
+
+
+@router.callback_query(F.data == "menu:support")
+async def cb_menu_support(callback: CallbackQuery, state: FSMContext):
+    text = await _prompt_support(state)
+    await callback.message.edit_text(text=text, reply_markup=back_home())
+    await callback.answer()
 
 
 @router.message(Command("support"))
