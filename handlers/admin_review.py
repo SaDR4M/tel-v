@@ -62,12 +62,17 @@ async def cb_admin_approve(callback: CallbackQuery, bot: Bot):
                 f"لینک اشتراک:\n<code>{sub_url}</code>\n\n"
             ),
         )
+        await callback.message.edit_caption(
+            caption=callback.message.caption + f"\n\n تایید شد توسط {callback.from_user.first_name}"
+        )
+        await callback.answer("تایید شد")
+        return
     else:
-        panel_username = await db.get_panel_username(telegram_id) or make_panel_username(
+        panel_username = await db.get_panel_username(order_id) or make_panel_username(
             order["requested_username"], telegram_id
         )
         logger.error(panel_username)
-        logger.error(await db.get_panel_username(telegram_id))
+        logger.error(await db.get_panel_username(order_id))
 
         try:
             user_obj = await panel.create_user(
@@ -96,6 +101,11 @@ async def cb_admin_approve(callback: CallbackQuery, bot: Bot):
                 f"برای راهنمای اتصال، /start → 📖 راهنمای استفاده را بزنید."
             ),
         )
+        await callback.message.edit_caption(
+            caption=callback.message.caption + f"\n\n تایید شد توسط {callback.from_user.first_name}"
+        )
+        await callback.answer("تایید شد")
+        return
 
 @router.callback_query(F.data.startswith("admin_reject:"))
 async def cb_admin_reject(callback: CallbackQuery, bot: Bot):
