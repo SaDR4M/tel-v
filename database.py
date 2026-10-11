@@ -2,7 +2,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 
 from config import settings
-from models import Base, User, Order, Support
+from models import Base, User, Order, Support, NotificationLog, NotificationKind, NotificationStatus
 from datetime import datetime
 
 engine = create_async_engine(f"sqlite+aiosqlite:///{settings.DB_PATH}")
