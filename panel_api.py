@@ -10,11 +10,20 @@ from logging import getLogger
 import uuid
 import aiohttp
 from config import settings
+import enum
 
 logger = getLogger(__name__)
 
 class PanelAPIError(Exception):
     pass
+
+
+class UserStatus(str, enum.Enum):
+    ACTIVE = "active"
+    ON_HOLD = "on_hold"
+    LIMITED = "limited"
+    EXPIRED = "expired"
+    DISABLED = "disabled"
 
 
 class PanelClient:
@@ -145,5 +154,29 @@ class PanelClient:
             await self.reset_user_usage(username)
             # Re-fetch so the returned object reflects the reset usage too.
             return await self.get_user(username)
+
+    async def get_users_list(
+        self,
+        status: UserStatus  
+        ) -> dict:
+        """List of panel users with cutsom filtering
+        NOTE: Filtering options are not added to this function and can be implemeted base on the panel docs
+        """
+        print(status)
+        async with aiohttp.ClientSession() as session:
+            headers = await self._headers(session)
+            async with session.get(
+                f"{settings.PANEL_BASE_URL}/api/users",
+                headers=headers,
+                params={
+                    "status": status
+                },
+            ) as resp:
+                if resp.status != 200:
+                    raise PanelAPIError(
+                        f"Failed to fetch list of users: {resp.status} {await resp.text()}"
+                    )
+                return (await resp.json()).get("users")
+
 
 panel = PanelClient()
