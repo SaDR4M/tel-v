@@ -21,7 +21,7 @@ from datetime import datetime, timedelta
 router = Router()
 
 NEEDS_RENEWAL_STATUSES = {"expired", "disabled", "limited"}
-USAGE_THRESHOLD = 0.95
+USAGE_THRESHOLD = 0.90
 
 
 class RenewalFlow(StatesGroup):
