@@ -11,6 +11,7 @@ import uuid
 import aiohttp
 from config import settings
 import enum
+from typing import Optional
 
 logger = getLogger(__name__)
 
@@ -157,26 +158,47 @@ class PanelClient:
 
     async def get_users_list(
         self,
-        status: UserStatus  
-        ) -> dict:
-        """List of panel users with cutsom filtering
-        NOTE: Filtering options are not added to this function and can be implemeted base on the panel docs
+        status: Optional[UserStatus] = None,
+        page_size: int = 100,
+    ) -> list[dict]:
+        """Return every panel user (fully paginated), optionally filtered by
+        status. Marzban-style panels cap `/api/users` at one page, so we walk
+        `offset`/`limit` until all `total` rows are read -- otherwise the
+        status-sync would silently miss users once the count exceeds a page.
         """
-        print(status)
+        status_value = status.value if isinstance(status, UserStatus) else status
+        users: list[dict] = []
+        offset = 0
+
         async with aiohttp.ClientSession() as session:
             headers = await self._headers(session)
-            async with session.get(
-                f"{settings.PANEL_BASE_URL}/api/users",
-                headers=headers,
-                params={
-                    "status": status
-                },
-            ) as resp:
-                if resp.status != 200:
-                    raise PanelAPIError(
-                        f"Failed to fetch list of users: {resp.status} {await resp.text()}"
-                    )
-                return (await resp.json()).get("users")
+            while True:
+                params = {"offset": offset, "limit": page_size}
+                if status_value is not None:
+                    params["status"] = status_value
+
+                async with session.get(
+                    f"{settings.PANEL_BASE_URL}/api/users",
+                    headers=headers,
+                    params=params,
+                ) as resp:
+                    if resp.status != 200:
+                        raise PanelAPIError(
+                            f"Failed to fetch list of users: {resp.status} {await resp.text()}"
+                        )
+                    data = await resp.json()
+
+                batch = data.get("users") or []
+                users.extend(batch)
+                total = data.get("total")
+
+                if len(batch) < page_size:
+                    break
+                offset += page_size
+                if total is None or offset >= total:
+                    break
+
+        return users
 
 
 panel = PanelClient()
