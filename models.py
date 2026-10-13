@@ -18,6 +18,19 @@ class User(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
 
+class OrderStatus(str, enum.Enum):
+    PENDING = "pending"
+    APPROVED = "approved"
+    LIMITED = "limited"
+    EXPIRED = "expired"
+
+
+# Orders that have not (yet) resulted in a panel account. Used by the
+# payment-oriented queries so orders do not drop out once the status sync
+# flips them to a panel status (approved -> limited/expired).
+UNPROVISIONED_STATUSES = (OrderStatus.PENDING,)
+
+
 class Order(Base):
     __tablename__ = "orders"
 
@@ -27,7 +40,15 @@ class Order(Base):
     requested_username: Mapped[str | None] = mapped_column(String, nullable=True)
     order_type: Mapped[str] = mapped_column(String, default="purchase")  # purchase / renewal
     target_panel_username: Mapped[str | None] = mapped_column(String, nullable=True)  # set when order_type == "renewal"
-    status: Mapped[str] = mapped_column(String, default="pending")  # pending / approved / rejected
+    status: Mapped[OrderStatus] = mapped_column(
+        Enum(
+            OrderStatus,
+            native_enum=False,
+            values_callable=lambda enum_cls: [member.value for member in enum_cls],
+        ),
+        nullable=False,
+        default=OrderStatus.PENDING
+    )
     receipt_file_id: Mapped[str | None] = mapped_column(String, nullable=True)
     admin_message_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     panel_username: Mapped[str | None] = mapped_column(String, nullable=True)

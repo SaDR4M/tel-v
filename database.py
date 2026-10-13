@@ -1,8 +1,18 @@
-from sqlalchemy import select
+from sqlalchemy import select, update, bindparam
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 
 from config import settings
-from models import Base, User, Order, Support, NotificationLog, NotificationKind, NotificationStatus
+from models import (
+    Base,
+    User,
+    Order,
+    OrderStatus,
+    Support,
+    NotificationLog,
+    NotificationKind,
+    NotificationStatus,
+    UNPROVISIONED_STATUSES,
+)
 from datetime import datetime
 
 engine = create_async_engine(f"sqlite+aiosqlite:///{settings.DB_PATH}")
@@ -108,12 +118,18 @@ async def has_used_plan(telegram_id: int, plan_id: str) -> bool:
 
 
 async def get_active_orders(telegram_id: int) -> list[dict]:
-    """Returns this user's approved orders (i.e. subscriptions that were
-    actually created on the panel), most recent first."""
+    """Returns this user's provisioned + not-yet-expired orders (i.e.
+    subscriptions that were actually created on the panel), most recent
+    first. Predicate is payment-oriented so it stays valid after the status
+    sync task flips an order to its panel-mirrored status."""
     async with SessionLocal() as session:
         result = await session.execute(
             select(Order)
-            .where(Order.telegram_id == telegram_id, Order.status == "approved", Order.expire_at >= datetime.now())
+            .where(
+                Order.telegram_id == telegram_id,
+                Order.status.notin_(UNPROVISIONED_STATUSES),
+                Order.expire_at >= datetime.now(),
+            )
             .order_by(Order.created_at.desc())
         )
         orders = result.scalars().all()
@@ -130,7 +146,10 @@ async def get_distinct_panel_usernames(telegram_id: int) -> list[str]:
     async with SessionLocal() as session:
         result = await session.execute(
             select(Order.panel_username, Order.target_panel_username)
-            .where(Order.telegram_id == telegram_id, Order.status == "approved")
+            .where(
+                Order.telegram_id == telegram_id,
+                Order.status.notin_(UNPROVISIONED_STATUSES),
+            )
             .order_by(Order.created_at.desc())
         )
         rows = result.all()
@@ -140,6 +159,44 @@ async def get_distinct_panel_usernames(telegram_id: int) -> list[str]:
                 if candidate and candidate not in seen:
                     seen[candidate] = None
         return list(seen.keys())
+
+
+# async def get_provisioned_orders() -> list[tuple[int, str, OrderStatus]]:
+#     """Returns (order_id, panel_username, status) for every order that has a
+#     panel account -- i.e. everything past the pending/rejected payment stage.
+#     Only the columns the status-sync needs are selected to keep it light."""
+#     async with SessionLocal() as session:
+#         result = await session.execute(
+#             select(Order.order_id, Order.panel_username, Order.status).where(
+#                 Order.panel_username.is_not(None),
+#                 Order.status.notin_(UNPROVISIONED_STATUSES),
+#             )
+#         )
+#         return [tuple(row) for row in result.all()]
+#
+#
+# async def bulk_update_order_statuses(updates: list[tuple[int, OrderStatus]]) -> int:
+#     """Applies many order status changes in a single executemany UPDATE
+#     (one round-trip instead of one UPDATE per order).
+#
+#     `updates` is a list of (order_id, new_status); returns the count applied.
+#     Uses the Core table to avoid ORM identity-map sync on executemany."""
+#     if not updates:
+#         return 0
+#
+#     table = Order.__table__
+#     async with SessionLocal() as session:
+#         await session.execute(
+#             table.update()
+#             .where(table.c.order_id == bindparam("b_order_id"))
+#             .values(status=bindparam("b_status")),
+#             [
+#                 {"b_order_id": order_id, "b_status": status}
+#                 for order_id, status in updates
+#             ],
+#         )
+#         await session.commit()
+#     return len(updates)
 
 
 async def create_support_message(message_id: int, from_user_id: int) -> int:

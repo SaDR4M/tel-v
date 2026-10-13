@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, List
 from celery import shared_task
 import asyncio
 from datetime import datetime, timedelta
@@ -6,14 +6,113 @@ from aiogram import Bot
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 # local
-from database import SessionLocal, Order, NotificationLog, NotificationKind, NotificationStatus
+from database import SessionLocal, Order, NotificationLog, NotificationKind, NotificationStatus, OrderStatus
 from schema import OrderSchema
-from sqlalchemy import select, exists, func
+from sqlalchemy import select, exists, func, update
 from config import settings
 from panel_api import panel, UserStatus
 
 
+# -----------------------------------------------------
+async def _fetch_all_active_orders(status: OrderStatus = OrderStatus.APPROVED):
+    print("Fetching active orders")
+    async with SessionLocal() as session:
+        result = await session.execute(select(Order).where(Order.status == status))
+        orders = result.scalars().all()
+        return orders
 
+def _process_users(users: List[dict]) -> dict[str, dict]:
+    print("Processing users data")
+    processed_users = {}
+
+    for user in users:
+        panel_username = user.get("username", "")
+        if not panel_username:
+            continue
+
+        expire = user.get("expire")
+        processed_users[panel_username] = {
+            "panel_username": panel_username,
+            "expire_at": datetime.fromtimestamp(expire) if expire else None,
+            "data_limit": user.get("data_limit") or 0,
+            "used_traffic": user.get("used_traffic") or 0,
+        }
+
+    return processed_users
+
+
+async def _order_status_bulk_update(orders: List[Order]):
+    if not orders:
+        return
+
+    updates = [
+        {
+            "order_id": order.order_id,
+            "status": order.status,
+        }
+        for order in orders
+    ]
+    print(f"Updating the statuses: {updates}")
+
+    async with SessionLocal() as session:
+        async with session.begin():
+            await session.execute(
+                update(Order),
+                updates,
+            )
+
+
+@shared_task(
+    bind=True,
+    max_retries=3,
+    # autoretry_for((Exception,))
+)
+def sync_order_statuses(*args, **kwargs):
+    """
+    Update approved order statuses to have valid order statuses.
+    NOTE: This task will be called before sending the user reminder message.
+    """
+    active_orders = asyncio.run(_fetch_all_active_orders())
+    print(active_orders)
+    all_users = asyncio.run(panel.get_users_list(status=None))
+
+    processed_users = _process_users(all_users)
+
+    now = datetime.now()
+
+    updated = False
+    update_orders: List[Order] = []
+
+    for order in active_orders:
+        panel_user = processed_users.get(order.panel_username)
+
+        if not panel_user:
+            print(
+                f"User with {order.panel_username} was not found "
+                "in list of panel users."
+            )
+            continue
+
+        expire_at = panel_user.get("expire_at")
+        data_limit = panel_user.get("data_limit")
+        used_traffic = panel_user.get("used_traffic")
+
+        new_status = order.status
+
+        if used_traffic >= data_limit:
+            new_status = OrderStatus.LIMITED
+        elif expire_at < now:
+            new_status = OrderStatus.EXPIRED
+
+        if order.status != new_status:
+            order.status = new_status
+            update_orders.append(order)
+
+    asyncio.run(_order_status_bulk_update(update_orders))
+
+    return 1
+
+# ------------------------------------------------------
 async def _scan_subscriptions_expire_date():
     async with SessionLocal() as session:
         # TODO: Update the user order status when it's reached the limit of usage or time.
@@ -103,7 +202,7 @@ def scan_subscriptions(*args, **kwargs):
     print("CALLING THE SCAN SUBS")
     send_expire_reminder.apply_async()
     send_limit_reminder.apply_async()
-    return True
+    return None
 
 
 @shared_task(
@@ -148,7 +247,7 @@ def send_expire_reminder(*args, **kwargs):
                 print(f"Error occured when trying to save the session, error: {str(e)}")
                 continue
 
-    return True
+    return None
 
 # ---------------------------------------------------------------------------- 
 async def _fetch_order(panel_username: str, expire_at: datetime):
@@ -223,4 +322,4 @@ def send_limit_reminder(*args, **kwargs):
                 continue
 
 
-    return True
+    return None
