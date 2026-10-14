@@ -22,6 +22,22 @@ SessionLocal = async_sessionmaker(engine, expire_on_commit=False)
 async def init_db():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        await conn.run_sync(_ensure_order_columns)
+
+
+def _ensure_order_columns(conn):
+    """Additively patch columns added after the first deploy.
+
+    create_all never alters existing tables, so without this an upgraded
+    database would lack the new columns and every ORM read would fail.
+    """
+    existing = {
+        row[1] for row in conn.exec_driver_sql("PRAGMA table_info(orders)").fetchall()
+    }
+    if "coupon_code" not in existing:
+        conn.exec_driver_sql("ALTER TABLE orders ADD COLUMN coupon_code VARCHAR")
+    if "final_price" not in existing:
+        conn.exec_driver_sql("ALTER TABLE orders ADD COLUMN final_price INTEGER")
 
 
 async def upsert_user(telegram_id: int, telegram_username: str | None):
@@ -62,6 +78,8 @@ async def create_order(
     expire_at: datetime,
     order_type: str = "purchase",
     target_panel_username: str | None = None,
+    coupon_code: str | None = None,
+    final_price: int | None = None,
 ) -> int:
     async with SessionLocal() as session:
         order = Order(
@@ -72,6 +90,8 @@ async def create_order(
             status="pending",
             order_type=order_type,
             target_panel_username=target_panel_username,
+            coupon_code=coupon_code,
+            final_price=final_price,
             expire_at=expire_at
         )
         session.add(order)
@@ -171,6 +191,8 @@ async def get_sales_data() -> list[dict]:
                 Order.telegram_id,
                 User.telegram_username,
                 Order.plan_id,
+                Order.coupon_code,
+                Order.final_price,
                 Order.created_at,
             )
             .outerjoin(User, User.telegram_id == Order.telegram_id)
@@ -182,9 +204,11 @@ async def get_sales_data() -> list[dict]:
                 "telegram_id": telegram_id,
                 "telegram_username": telegram_username,
                 "plan_id": plan_id,
+                "coupon_code": coupon_code,
+                "final_price": final_price,
                 "created_at": created_at,
             }
-            for telegram_id, telegram_username, plan_id, created_at in result.all()
+            for telegram_id, telegram_username, plan_id, coupon_code, final_price, created_at in result.all()
         ]
 
 

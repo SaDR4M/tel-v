@@ -38,3 +38,37 @@ with open(BASE_DIR / "config" / "plans.json", "r", encoding="utf-8") as f:
 
 def get_plan(plan_id: str):
     return next((p for p in PLANS if p["id"] == plan_id), None)
+
+
+# Load coupons (edit config/coupons.json to add/remove codes). Each coupon
+# sets a constant per-GB price in toman; missing file means no coupons.
+try:
+    with open(BASE_DIR / "config" / "coupons.json", "r", encoding="utf-8") as f:
+        COUPONS = json.load(f)
+except FileNotFoundError:
+    COUPONS = []
+
+
+def get_coupon(code: str):
+    """Find a coupon by code (case-insensitive), or None."""
+    code = (code or "").strip().upper()
+    if not code:
+        return None
+    return next(
+        (c for c in COUPONS if str(c.get("code", "")).upper() == code), None
+    )
+
+
+def coupon_price(plan: dict, coupon: dict) -> int | None:
+    """Final price for a plan with a coupon applied, or None if the coupon
+    cannot apply (bad rate, or the plan has no data cap to price against).
+
+    final = min(list_price, rate_per_gb * gb) — a coupon never makes an
+    order more expensive than the list price.
+    """
+    rate = int(coupon.get("toman_per_gb") or 0)
+    data_limit = int(plan.get("data_limit_bytes") or 0)
+    if rate <= 0 or data_limit <= 0:
+        return None
+    gb = data_limit / (1024 ** 3)
+    return min(int(plan["price"]), int(rate * gb))

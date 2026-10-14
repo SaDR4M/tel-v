@@ -44,10 +44,14 @@ def _sold_lines(rows):
         plan = settings.get_plan(r["plan_id"])
         if not plan:
             continue
+        # A coupon order counts at the amount actually paid.
+        price = r.get("final_price")
+        if price is None:
+            price = int(plan["price"])
         yield (
             r["telegram_id"],
             r.get("telegram_username"),
-            int(plan["price"]),
+            int(price),
             int(plan.get("data_limit_bytes") or 0),
         )
 

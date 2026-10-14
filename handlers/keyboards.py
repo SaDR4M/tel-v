@@ -72,8 +72,13 @@ def plans_menu() -> InlineKeyboardMarkup:
     return b.as_markup()
 
 
-def confirm_purchase(plan_id: str) -> InlineKeyboardMarkup:
+def confirm_purchase(plan_id: str, coupon_code: str | None = None) -> InlineKeyboardMarkup:
     b = InlineKeyboardBuilder()
+    if coupon_code:
+        b.button(text="🔄 تغییر کد تخفیف", callback_data=f"coupon:ask:{plan_id}")
+        b.button(text="❌ حذف تخفیف", callback_data=f"coupon:remove:{plan_id}")
+    else:
+        b.button(text="🎟 کد تخفیف دارم", callback_data=f"coupon:ask:{plan_id}")
     b.button(text="✅ پرداخت کردم، رسید را ارسال می‌کنم", callback_data=f"payflow:{plan_id}")
     b.button(text="⬅️ بازگشت", callback_data="menu:plans")
     b.adjust(1)

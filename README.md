@@ -30,6 +30,8 @@ Edit `.env`:
 
 Edit **`config/plans.json`** to set your actual prices, data caps, and durations — no code changes needed.
 
+Discount coupons live in **`config/coupons.json`**: each entry sets a constant per-GB price in toman (e.g. `{"code": "FRIENDS", "toman_per_gb": 4500}`), applied on the purchase screen before payment. Remove a code to disable it.
+
 Also edit the payment instructions placeholder in `handlers/purchase.py` (`cb_buy` function) — put your real wallet address / payment details there.
 
 ## 2. Run locally (for testing)
