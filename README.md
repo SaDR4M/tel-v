@@ -25,6 +25,8 @@ Edit `.env`:
 | `PANEL_BASE_URL` | e.g. `https://api.rickpanel.io` |
 | `PANEL_ADMIN_USERNAME` / `PANEL_ADMIN_PASSWORD` | Panel admin credentials (used to fetch an API token) |
 | `SUPPORT_CONTACT` | Shown in the Support menu, e.g. `@yourhandle` |
+| `CELERY_BROKER_URL` | Redis broker for the reminder worker (default `redis://localhost:6379/0`) |
+| `CELERY_RESULT_BACKEND` | Redis result backend (default `redis://localhost:6379/1`) |
 
 Edit **`config/plans.json`** to set your actual prices, data caps, and durations — no code changes needed.
 
@@ -96,6 +98,53 @@ sudo systemctl status vpnbot   # check it's running
 journalctl -u vpnbot -f        # watch live logs
 ```
 
+### Reminders: run the Celery worker + beat
+
+Expiry and 90%-usage reminders are Celery tasks, so they need Redis plus two
+background roles: a **worker** (executes tasks) and **beat** (schedules them).
+Install Redis, then:
+
+```bash
+sudo apt install -y redis-server
+sudo systemctl enable --now redis-server   # broker + result backend
+```
+
+Run the worker and beat locally (development):
+
+```bash
+celery -A app.celery_app worker -l info
+celery -A app.celery_app beat -l info
+```
+
+On the VPS a single service running both is simplest. Create
+`/etc/systemd/system/vpnbot-celery.service`:
+
+```ini
+[Unit]
+Description=Telegram VPN Bot - reminder worker + beat
+After=network.target redis-server.service
+
+[Service]
+User=youruser
+WorkingDirectory=/home/youruser/telegram_vpn_bot
+ExecStart=/home/youruser/telegram_vpn_bot/venv/bin/celery -A app.celery_app worker -B -l info
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+```
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now vpnbot-celery
+journalctl -u vpnbot-celery -f
+```
+
+`worker -B` runs beat inside the worker (fine for a single small server). The
+schedule in `app/celery_app.py` syncs order statuses every 15 minutes and sends
+the reminders every 6 hours.
+
 ## 4. If your panel's API differs from Marzban's schema
 
 Everything panel-specific lives in **`panel_api.py`** — that's the only file you should need to touch if endpoint paths, auth flow, or payload shape differ from what's here. It currently assumes:
@@ -112,6 +161,10 @@ telegram_vpn_bot/
 ├── main.py                 # entry point, wires up routers
 ├── database.py             # SQLite: user <-> panel account mapping, orders
 ├── panel_api.py            # panel API client — edit here if your API differs
+├── app/
+│   └── celery_app.py       # Celery app + beat schedule (status sync, reminders)
+├── tasks/
+│   └── subs.py             # order-status sync and reminder tasks
 ├── config/
 │   ├── settings.py         # loads .env + plans.json
 │   └── plans.json          # your pricing/data plans — edit freely
