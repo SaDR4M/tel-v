@@ -1,0 +1,29 @@
+# Deploy: copy to /etc/systemd/system/vpnbot-celery-worker.service, then:
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now vpnbot-celery-worker
+#
+# Needs: code + .venv deployed at WorkingDirectory, .env next to the code
+# (the app loads .env itself via load_dotenv, so no EnvironmentFile is
+# needed), and Redis reachable at CELERY_BROKER_URL / CELERY_RESULT_BACKEND.
+
+[Unit]
+Description=Telegram VPN Bot - Celery worker (status sync + reminders)
+After=network.target redis-server.service
+
+[Service]
+Type=simple
+User=root
+Group=root
+WorkingDirectory=/root/Project/Telegram-bot-v2/telegram_vpn_bot/telegram_vpn_bot
+ExecStart=/root/Project/Telegram-bot-v2/telegram_vpn_bot/telegram_vpn_bot/.venv/bin/celery -A app.celery_app worker --loglevel=info
+Restart=always
+RestartSec=10
+# Let running tasks finish on stop/restart instead of killing them mid-send.
+TimeoutStopSec=120
+KillSignal=SIGTERM
+StandardOutput=append:/var/log/celery-worker.log
+StandardError=append:/var/log/celery-worker.log
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

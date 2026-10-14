@@ -1,0 +1,27 @@
+# Deploy: copy to /etc/systemd/system/vpnbot-celery-beat.service, then:
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now vpnbot-celery-beat
+#
+# Run EXACTLY ONE beat instance. If you previously used the old combined
+# vpnbot-celery (worker -B) unit, disable it first, otherwise two schedulers
+# fire every task twice (duplicate reminders):
+#   sudo systemctl disable --now vpnbot-celery
+
+[Unit]
+Description=Telegram VPN Bot - Celery beat scheduler
+After=network.target redis-server.service vpnbot-celery-worker.service
+
+[Service]
+Type=simple
+User=root
+Group=root
+WorkingDirectory=/root/Project/Telegram-bot-v2/telegram_vpn_bot/telegram_vpn_bot
+ExecStart=/root/Project/Telegram-bot-v2/telegram_vpn_bot/telegram_vpn_bot/.venv/bin/celery -A app.celery_app beat --loglevel=info --schedule=/root/Project/Telegram-bot-v2/telegram_vpn_bot/telegram_vpn_bot/data/celerybeat-schedule
+Restart=always
+RestartSec=10
+StandardOutput=append:/var/log/celery-beat.log
+StandardError=append:/var/log/celery-beat.log
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

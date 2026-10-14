@@ -116,34 +116,34 @@ celery -A app.celery_app worker -l info
 celery -A app.celery_app beat -l info
 ```
 
-On the VPS a single service running both is simplest. Create
-`/etc/systemd/system/vpnbot-celery.service`:
-
-```ini
-[Unit]
-Description=Telegram VPN Bot - reminder worker + beat
-After=network.target redis-server.service
-
-[Service]
-User=youruser
-WorkingDirectory=/home/youruser/telegram_vpn_bot
-ExecStart=/home/youruser/telegram_vpn_bot/venv/bin/celery -A app.celery_app worker -B -l info
-Restart=always
-RestartSec=5
-
-[Install]
-WantedBy=multi-user.target
-```
+On the VPS, run worker and beat as two separate systemd services (they must
+be separate processes in production — and never run a second beat instance,
+or every scheduled task fires twice). Ready-made unit files live in `deploy/`,
+already filled in for `root` + `/root/Project/Telegram-bot-v2/telegram_vpn_bot/telegram_vpn_bot`
+(+ `.venv`, logs to `/var/log/celery-worker.log` and `/var/log/celery-beat.log`,
+same style as the bot service):
 
 ```bash
+# On the server
+sudo cp deploy/vpnbot-celery-worker.service deploy/vpnbot-celery-beat.service /etc/systemd/system/
 sudo systemctl daemon-reload
-sudo systemctl enable --now vpnbot-celery
-journalctl -u vpnbot-celery -f
+sudo systemctl enable --now vpnbot-celery-worker vpnbot-celery-beat
+systemctl status vpnbot-celery-worker vpnbot-celery-beat   # both should be active
+tail -f /var/log/celery-worker.log   # task execution logs
+tail -f /var/log/celery-beat.log     # scheduler logs
 ```
 
-`worker -B` runs beat inside the worker (fine for a single small server). The
-schedule in `app/celery_app.py` syncs order statuses every 15 minutes and sends
-the reminders every 6 hours.
+Notes:
+
+- The app loads `.env` itself, so no `EnvironmentFile` is needed — `.env` just
+  has to sit next to the code.
+- Beat keeps its schedule in `data/celerybeat-schedule` (already gitignored).
+- If you previously ran a combined `worker -B` unit, disable it first:
+  `sudo systemctl disable --now vpnbot-celery` — two beats means duplicate
+  reminders.
+
+The schedule in `app/celery_app.py` syncs order statuses every 15 minutes and
+sends the reminders every hour.
 
 ## 4. If your panel's API differs from Marzban's schema
 
@@ -165,6 +165,9 @@ telegram_vpn_bot/
 │   └── celery_app.py       # Celery app + beat schedule (status sync, reminders)
 ├── tasks/
 │   └── subs.py             # order-status sync and reminder tasks
+├── deploy/
+│   ├── vpnbot-celery-worker.service   # systemd unit: celery worker
+│   └── vpnbot-celery-beat.service     # systemd unit: celery beat (run once!)
 ├── config/
 │   ├── settings.py         # loads .env + plans.json
 │   └── plans.json          # your pricing/data plans — edit freely
