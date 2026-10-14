@@ -24,6 +24,10 @@ SUPPORT_CONTACT = os.getenv("SUPPORT_CONTACT", "@Sadragjl")
 APP_NAME = os.getenv("APP_NAME", "Dante")
 CURRENCY = os.getenv("CURRENCY", "IRT")
 
+# Celery / Redis broker used by the reminder worker and beat scheduler.
+CELERY_BROKER_URL = os.getenv("CELERY_BROKER_URL", "redis://localhost:6379/0")
+CELERY_RESULT_BACKEND = os.getenv("CELERY_RESULT_BACKEND", "redis://localhost:6379/1")
+
 # Make sure the data directory exists
 DB_PATH.parent.mkdir(parents=True, exist_ok=True)
 
