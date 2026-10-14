@@ -13,6 +13,7 @@ from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 from config import settings
 from panel_api import panel, UserStatus
+from handlers.test_plan import TEST_PLAN_ID
 
 logger = logging.getLogger(__name__)
 
@@ -104,6 +105,8 @@ async def _scan_subscriptions_expire_date():
         result = await session.execute(
             select(Order).where(
                 Order.status.notin_(UNPROVISIONED_STATUSES),
+                # Free test plans never get expiry reminders.
+                Order.plan_id != TEST_PLAN_ID,
                 Order.expire_at > now,
                 Order.expire_at < now + timedelta(days=2)
             )
@@ -254,6 +257,8 @@ async def _fetch_order(panel_username: str):
             .where(
                 Order.panel_username == panel_username,
                 Order.status.notin_(UNPROVISIONED_STATUSES),
+                # Free test plans never get usage reminders.
+                Order.plan_id != TEST_PLAN_ID,
             )
             .order_by(Order.expire_at.desc())
             .limit(1)
