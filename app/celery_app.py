@@ -18,13 +18,13 @@ celery_app.conf.update(
         # rest of the bot sees fresh statuses between reminder passes.
         "sync-order-status": {
             "task": "tasks.subs.sync_order_statuses",
-            "schedule": crontab(minute="*/1"),
+            "schedule": crontab(minute="*/15"),
         },
         # Expiry / 90% usage reminders. The separate sync above keeps order
         # statuses fresh; these runs only send messages.
         "scan-subscriptions-reminders": {
             "task": "tasks.subs.scan_subscriptions",
-            "schedule": crontab(minute="*/2"),
+            "schedule": crontab(minute="*/60"),
         },
     }
 )
