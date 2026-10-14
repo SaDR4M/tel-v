@@ -19,16 +19,34 @@ class User(Base):
 
 
 class OrderStatus(str, enum.Enum):
+    # Payment workflow (set by the bot).
     PENDING = "pending"
-    APPROVED = "approved"
+    APPROVED = "approved"   # paid + panel account created, not synced yet
+    REJECTED = "rejected"
+    # Subscription lifecycle (mirrored verbatim from the panel, the source of
+    # truth). ACTIVE is what the panel reports for a healthy account.
+    ACTIVE = "active"
     LIMITED = "limited"
     EXPIRED = "expired"
+    DISABLED = "disabled"
+    ON_HOLD = "on_hold"
 
 
 # Orders that have not (yet) resulted in a panel account. Used by the
 # payment-oriented queries so orders do not drop out once the status sync
-# flips them to a panel status (approved -> limited/expired).
-UNPROVISIONED_STATUSES = (OrderStatus.PENDING,)
+# flips them to the panel's status (approved -> active/limited/expired).
+UNPROVISIONED_STATUSES = (OrderStatus.PENDING, OrderStatus.REJECTED)
+
+
+# Panel status string -> local OrderStatus. Copied 1:1 (no recomputation), so
+# the panel's precedence for limited/expired/unlimited is respected as-is.
+PANEL_STATUS_TO_ORDER_STATUS = {
+    "active": OrderStatus.ACTIVE,
+    "limited": OrderStatus.LIMITED,
+    "expired": OrderStatus.EXPIRED,
+    "disabled": OrderStatus.DISABLED,
+    "on_hold": OrderStatus.ON_HOLD,
+}
 
 
 class Order(Base):

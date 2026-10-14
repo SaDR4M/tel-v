@@ -1,44 +1,42 @@
-from typing import Optional, List
+from typing import List
 from celery import shared_task
 import asyncio
+import logging
 from datetime import datetime, timedelta
 from aiogram import Bot
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 # local
-from database import SessionLocal, Order, NotificationLog, NotificationKind, NotificationStatus, OrderStatus
-from schema import OrderSchema
-from sqlalchemy import select, exists, func, update
+from database import SessionLocal, Order, NotificationLog, NotificationKind, NotificationStatus
+from models import UNPROVISIONED_STATUSES, PANEL_STATUS_TO_ORDER_STATUS
+from sqlalchemy import select, update
+from sqlalchemy.exc import IntegrityError
 from config import settings
 from panel_api import panel, UserStatus
 
+logger = logging.getLogger(__name__)
 
-# -----------------------------------------------------
-async def _fetch_all_active_orders(status: OrderStatus = OrderStatus.APPROVED):
-    print("Fetching active orders")
+
+# ---------------------------------------------------------------------------
+# Status sync. The panel is the source of truth: every provisioned order's
+# status is copied verbatim from the panel (no recomputation from traffic or
+# expiry, so precedence and unlimited plans are handled by the panel itself).
+# ---------------------------------------------------------------------------
+async def _fetch_provisioned_orders() -> List[Order]:
     async with SessionLocal() as session:
-        result = await session.execute(select(Order).where(Order.status == status))
-        orders = result.scalars().all()
-        return orders
+        result = await session.execute(
+            select(Order).where(Order.status.notin_(UNPROVISIONED_STATUSES))
+        )
+        return result.scalars().all()
 
-def _process_users(users: List[dict]) -> dict[str, dict]:
-    print("Processing users data")
-    processed_users = {}
 
+def _panel_statuses_by_username(users: List[dict]) -> dict[str, str]:
+    statuses: dict[str, str] = {}
     for user in users:
-        panel_username = user.get("username", "")
-        if not panel_username:
-            continue
-
-        expire = user.get("expire")
-        processed_users[panel_username] = {
-            "panel_username": panel_username,
-            "expire_at": datetime.fromtimestamp(expire) if expire else None,
-            "data_limit": user.get("data_limit") or 0,
-            "used_traffic": user.get("used_traffic") or 0,
-        }
-
-    return processed_users
+        panel_username = user.get("username")
+        if panel_username:
+            statuses[panel_username] = (user.get("status") or "").lower()
+    return statuses
 
 
 async def _order_status_bulk_update(orders: List[Order]):
@@ -52,7 +50,7 @@ async def _order_status_bulk_update(orders: List[Order]):
         }
         for order in orders
     ]
-    print(f"Updating the statuses: {updates}")
+    logger.debug("Syncing statuses: %s", updates)
 
     async with SessionLocal() as session:
         async with session.begin():
@@ -68,88 +66,100 @@ async def _order_status_bulk_update(orders: List[Order]):
     # autoretry_for((Exception,))
 )
 def sync_order_statuses(*args, **kwargs):
+    """Mirror every provisioned order's status from the panel.
+
+    NOTE: This task runs before the reminder tasks so they see fresh statuses.
     """
-    Update approved order statuses to have valid order statuses.
-    NOTE: This task will be called before sending the user reminder message.
-    """
-    active_orders = asyncio.run(_fetch_all_active_orders())
-    print(active_orders)
+    orders = asyncio.run(_fetch_provisioned_orders())
+    if not orders:
+        return 0
+
     all_users = asyncio.run(panel.get_users_list(status=None))
+    panel_statuses = _panel_statuses_by_username(all_users)
 
-    processed_users = _process_users(all_users)
-
-    now = datetime.now()
-
-    updated = False
-    update_orders: List[Order] = []
-
-    for order in active_orders:
-        panel_user = processed_users.get(order.panel_username)
-
-        if not panel_user:
-            print(
-                f"User with {order.panel_username} was not found "
-                "in list of panel users."
+    to_update: List[Order] = []
+    for order in orders:
+        panel_status = panel_statuses.get(order.panel_username)
+        if panel_status is None:
+            logger.warning(
+                "Order %s: panel user '%s' not found, status left unchanged.",
+                order.order_id,
+                order.panel_username,
             )
             continue
 
-        expire_at = panel_user.get("expire_at")
-        data_limit = panel_user.get("data_limit")
-        used_traffic = panel_user.get("used_traffic")
-
-        new_status = order.status
-
-        if used_traffic >= data_limit:
-            new_status = OrderStatus.LIMITED
-        elif expire_at < now:
-            new_status = OrderStatus.EXPIRED
-
-        if order.status != new_status:
+        new_status = PANEL_STATUS_TO_ORDER_STATUS.get(panel_status)
+        if new_status is not None and new_status != order.status:
             order.status = new_status
-            update_orders.append(order)
+            to_update.append(order)
 
-    asyncio.run(_order_status_bulk_update(update_orders))
-
-    return 1
+    asyncio.run(_order_status_bulk_update(to_update))
+    logger.info("Status sync: %d order(s) updated.", len(to_update))
+    return len(to_update)
 
 # ------------------------------------------------------
 async def _scan_subscriptions_expire_date():
+    now = datetime.now()
     async with SessionLocal() as session:
-        # TODO: Update the user order status when it's reached the limit of usage or time.
         result = await session.execute(
             select(Order).where(
-                Order.status == "approved",
-                Order.expire_at > datetime.now(),
-                Order.expire_at < datetime.now() + timedelta(days=2)
+                Order.status.notin_(UNPROVISIONED_STATUSES),
+                Order.expire_at > now,
+                Order.expire_at < now + timedelta(days=2)
             )
         )
         orders = result.scalars().all()
-        # orders_schema = [OrderSchema.model_validate(order).model_dump_json() for order in orders]
         return orders
 
 
-async def _is_notification_sent(order_id: int, order_expires_at: Optional[datetime] = None, notif_kind: NotificationKind = NotificationKind.EXPIRY_2D):
-    async with SessionLocal() as session:
-        if notif_kind == NotificationKind.EXPIRY_2D:
-            result = select(
-                exists()
-                .where(
-                    NotificationLog.order_id == order_id,
-                    NotificationLog.kind == notif_kind,
-                    NotificationLog.cycle_expires_at == order_expires_at,
-                )
-            )
-        elif notif_kind == NotificationKind.USAGE_90:
-            result = select(
-                exists()
-                .where(
-                    NotificationLog.order_id == order_id,
-                    NotificationLog.kind == notif_kind,
-                    # NotificationLog.cycle_expires_at == order_expires_at,
-                )
-            )
+async def _claim_notification(
+    order_id: int,
+    kind: NotificationKind,
+    cycle_expires_at: datetime,
+) -> bool:
+    """Atomically claim the (order, kind, cycle) notification slot.
 
-        return await session.scalar(result)
+    The unique constraint on notification_log is used as the lock: the first
+    caller inserts a PENDING row and gets True; a concurrent/second caller hits
+    IntegrityError and gets False, so a message is never sent twice.
+    """
+    async with SessionLocal() as session:
+        session.add(
+            NotificationLog(
+                order_id=order_id,
+                kind=kind,
+                status=NotificationStatus.PENDING,
+                cycle_expires_at=cycle_expires_at,
+            )
+        )
+        try:
+            await session.commit()
+            return True
+        except IntegrityError:
+            await session.rollback()
+            return False
+
+
+async def _mark_notification(
+    order_id: int,
+    kind: NotificationKind,
+    cycle_expires_at: datetime,
+    status: NotificationStatus,
+):
+    values = {"status": status}
+    if status == NotificationStatus.SENT:
+        values["sent_at"] = datetime.now()
+    async with SessionLocal() as session:
+        await session.execute(
+            update(NotificationLog)
+            .where(
+                NotificationLog.order_id == order_id,
+                NotificationLog.kind == kind,
+                NotificationLog.cycle_expires_at == cycle_expires_at,
+            )
+            .values(**values)
+        )
+        await session.commit()
 
 
 async def _send_telegram_message(telegram_id: int, message: str, *args, **kwargs):
@@ -166,42 +176,24 @@ async def _send_telegram_message(telegram_id: int, message: str, *args, **kwargs
             
 
 
-async def _store_notification(order_id: int, expire_at: datetime, kind: NotificationKind, status: NotificationStatus):
-    async with SessionLocal() as session:
-        # Get the notification, if exists update it otherwise create it.
-        result = await session.execute(
-            select(NotificationLog)
-            .where(
-                NotificationLog.order_id == order_id,
-                NotificationLog.kind == kind
-            ).with_for_update()
-        )
-        notif = result.scalar_one_or_none()
-        if not notif:
-            notif_log = NotificationLog(
-                order_id=order_id,
-                kind=kind,
-                status=status,
-                cycle_expires_at=expire_at,
-                sent_at=datetime.now()
-            )
-            session.add(notif_log)
-        else:
-            notif.cycle_expires_at = expire_at
-            notif.sent_at = datetime.now()
-
-        await session.commit()
-
-
 @shared_task(
     bind=True,
     max_retries=1,
     # autoretry_for=(Exception,)
 )
 def scan_subscriptions(*args, **kwargs):
-    print("CALLING THE SCAN SUBS")
-    send_expire_reminder.apply_async()
-    send_limit_reminder.apply_async()
+    """Run both reminder passes.
+
+    Order statuses are kept fresh by the separate `sync-order-status` beat
+    schedule. These reminders don't depend on that mirrored status (the expiry
+    pass reads Order.expire_at and only excludes pending/rejected orders; the
+    usage pass reads live panel data), so we don't re-sync here.
+    """
+    for task in (send_expire_reminder, send_limit_reminder):
+        try:
+            task()
+        except Exception:
+            logger.exception("Reminder pipeline step %s failed.", task.name)
     return None
 
 
@@ -212,52 +204,59 @@ def scan_subscriptions(*args, **kwargs):
 )
 def send_expire_reminder(*args, **kwargs):
     orders = asyncio.run(_scan_subscriptions_expire_date())
-    if orders:
-        for order in orders:
-            telegram_id = order.telegram_id
-            panel_name = order.panel_username
-            expire_at = order.expire_at
-            order_id = order.order_id
-            # Check if we have send the notification messsage or not
-            is_sent = asyncio.run(_is_notification_sent(order_id, expire_at, NotificationKind.EXPIRY_2D))
-            if is_sent:
-                print(f"Notification has been sent for this order with order id: {order_id}")
-                continue
+    for order in orders:
+        cycle_expires_at = order.expire_at
+        # Claim before sending so an overlapping beat run can't double-send.
+        if not asyncio.run(
+            _claim_notification(order.order_id, NotificationKind.EXPIRY_2D, cycle_expires_at)
+        ):
+            continue
 
-            # Send the message to them
-            EXPIRY_WARNING_TEXT = (
-                "⚠️ اشتراک «{}» شما در آستانه‌ی پایان است.\n"
-                "برای جلوگیری از قطع شدن سرویس، لطفاً اشتراک خود را تمدید کنید."
+        text = (
+            "⚠️ اشتراک «{}» شما در آستانه‌ی پایان است.\n"
+            "برای جلوگیری از قطع شدن سرویس، لطفاً اشتراک خود را تمدید کنید."
+        ).format(order.panel_username)
+
+        try:
+            asyncio.run(_send_telegram_message(order.telegram_id, text))
+        except Exception as e:
+            logger.warning(
+                "Expiry reminder failed for order %s: %s", order.order_id, e
             )
-
-            try:
-                asyncio.run(
-                    _send_telegram_message(
-                        telegram_id=telegram_id, message=EXPIRY_WARNING_TEXT.format(panel_name)
-                    )
+            asyncio.run(
+                _mark_notification(
+                    order.order_id, NotificationKind.EXPIRY_2D,
+                    cycle_expires_at, NotificationStatus.FAILED,
                 )
-            except Exception as e:
-                print(f"Error while sending telegram message: {str(e)} to {order.telegram_id}, for time limit warning")
-                continue
+            )
+            continue
 
-            # Store the message
-            try:
-                asyncio.run(_store_notification(order_id, expire_at, NotificationKind.EXPIRY_2D, NotificationStatus.SENT))
-            except Exception as e:
-                print(f"Error occured when trying to save the session, error: {str(e)}")
-                continue
+        asyncio.run(
+            _mark_notification(
+                order.order_id, NotificationKind.EXPIRY_2D,
+                cycle_expires_at, NotificationStatus.SENT,
+            )
+        )
 
     return None
 
 # ---------------------------------------------------------------------------- 
-async def _fetch_order(panel_username: str, expire_at: datetime):
+async def _fetch_order(panel_username: str):
+    """Newest provisioned order for a panel username.
+
+    Renewals reuse the same panel username, so match on it alone and take the
+    latest expiry; a date-equality match would both miss and raise
+    MultipleResultsFound.
+    """
     async with SessionLocal() as session:
         result = await session.execute(
-            select(Order).where(
-                Order.status == "approved",
+            select(Order)
+            .where(
                 Order.panel_username == panel_username,
-                func.date(Order.expire_at) == expire_at.date()
+                Order.status.notin_(UNPROVISIONED_STATUSES),
             )
+            .order_by(Order.expire_at.desc())
+            .limit(1)
         )
         return result.scalar_one_or_none()
 
@@ -273,53 +272,72 @@ async def _scan_subscriptions_limit_usage():
     # autoretry_for=(Exception,)
 )
 def send_limit_reminder(*args, **kwargs):
-    """Send reminder to user to renew it's subscriptions if it's reached the 90% of the usage"""
-    users = asyncio.run(_scan_subscriptions_limit_usage())
+    """Remind users who passed 90% of their plan's data limit."""
+    try:
+        users = asyncio.run(_scan_subscriptions_limit_usage())
+    except Exception:
+        logger.exception("Usage reminder: failed to fetch panel users.")
+        return None
 
     for user in users:
-        used_traffic = user.get("used_traffic")
-        data_limit = user.get("data_limit")
-        panel_username = user.get("username")
-        expire_at = datetime.fromtimestamp(user.get("expire"))
+        try:
+            data_limit = user.get("data_limit")
+            used_traffic = user.get("used_traffic") or 0
+            panel_username = user.get("username")
 
-        used_percentage = (used_traffic / data_limit) * 100
-        # Send user message if the data limit is more than 90 percentage
+            # 0/None data_limit means an unlimited plan -- nothing to warn about.
+            if not data_limit or not panel_username:
+                continue
 
-        if used_percentage > 90:
-            print(f"{panel_username} has reached 90% of usage limit")
-            # Fetch the order from db, base on the panel_username and the expire date
-            order = asyncio.run(_fetch_order(panel_username=panel_username, expire_at=expire_at))
-    
+            used_percentage = (used_traffic / data_limit) * 100
+            if used_percentage <= 90:
+                continue
+
+            order = asyncio.run(_fetch_order(panel_username))
             if not order:
-                print(f"Order with {panel_username}, {expire_at} was not found.")
+                logger.warning(
+                    "Usage reminder: no provisioned order for panel user '%s'.",
+                    panel_username,
+                )
                 continue
 
-            is_sent = asyncio.run(_is_notification_sent(order_id=order.order_id, notif_kind=NotificationKind.USAGE_90))
-            if is_sent:
-                print(f"Notification has been sent for this order with order id: {order.order_id}")
+            cycle_expires_at = order.expire_at
+            if not asyncio.run(
+                _claim_notification(
+                    order.order_id, NotificationKind.USAGE_90, cycle_expires_at
+                )
+            ):
                 continue
 
-            # Send the message to them
-            USAGE_90_WARNING_TEXT = (
+            text = (
                 "⚠️ بیش از ۹۰٪ از حجم اشتراک «{}» شما مصرف شده است.\n"
                 "برای جلوگیری از قطع شدن سرویس، لطفاً نسبت به تمدید یا خرید سرویس جدید اقدام کنید."
-            )
+            ).format(order.panel_username)
+
             try:
+                asyncio.run(_send_telegram_message(order.telegram_id, text))
+            except Exception as e:
+                logger.warning(
+                    "Usage reminder failed for order %s: %s", order.order_id, e
+                )
                 asyncio.run(
-                    _send_telegram_message(
-                        telegram_id=order.telegram_id, message=USAGE_90_WARNING_TEXT.format(order.panel_username)
+                    _mark_notification(
+                        order.order_id, NotificationKind.USAGE_90,
+                        cycle_expires_at, NotificationStatus.FAILED,
                     )
                 )
-            except Exception as e:
-                print(f"Error while sending telegram message: {str(e)} to {order.telegram_id}, for Usage warning")
                 continue
 
-            # Store the message
-            try:
-                asyncio.run(_store_notification(order.order_id, expire_at, NotificationKind.USAGE_90, NotificationStatus.SENT))
-            except Exception as e:
-                print(f"Error occured when trying to save the session, error: {str(e)}")
-                continue
-
+            asyncio.run(
+                _mark_notification(
+                    order.order_id, NotificationKind.USAGE_90,
+                    cycle_expires_at, NotificationStatus.SENT,
+                )
+            )
+        except Exception as e:
+            logger.exception(
+                "Usage reminder: unexpected error for user %s: %s",
+                user.get("username"), e,
+            )
 
     return None
