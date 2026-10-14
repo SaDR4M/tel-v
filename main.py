@@ -10,6 +10,7 @@ from aiogram.types import BotCommand
 from config import settings
 import database as db
 from handlers import menu, purchase, admin_review, mysub, docs_support, test_plan, renewal, admin
+from middlewares import CancelStaleStateMiddleware
 
 import psutil
 import os
@@ -41,6 +42,11 @@ async def server():
         default=DefaultBotProperties(parse_mode=ParseMode.HTML),
     )
     dp = Dispatcher(storage=MemoryStorage())
+
+    # Abandoned order/support flows are cancelled here (commands, menu
+    # buttons and back-home clear the FSM state before routing continues).
+    dp.message.middleware(CancelStaleStateMiddleware())
+    dp.callback_query.middleware(CancelStaleStateMiddleware())
 
     dp.include_router(menu.router)
     dp.include_router(purchase.router)
