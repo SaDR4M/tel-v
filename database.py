@@ -161,6 +161,33 @@ async def get_distinct_panel_usernames(telegram_id: int) -> list[str]:
         return list(seen.keys())
 
 
+async def get_sales_data() -> list[dict]:
+    """Every provisioned order (sold — i.e. past the pending/rejected payment
+    stage) with the buyer's Telegram username, for the admin sales reports.
+    Pricing lives in plans.json, so only the plan_id is returned."""
+    async with SessionLocal() as session:
+        result = await session.execute(
+            select(
+                Order.telegram_id,
+                User.telegram_username,
+                Order.plan_id,
+                Order.created_at,
+            )
+            .outerjoin(User, User.telegram_id == Order.telegram_id)
+            .where(Order.status.notin_(UNPROVISIONED_STATUSES))
+            .order_by(Order.created_at.asc())
+        )
+        return [
+            {
+                "telegram_id": telegram_id,
+                "telegram_username": telegram_username,
+                "plan_id": plan_id,
+                "created_at": created_at,
+            }
+            for telegram_id, telegram_username, plan_id, created_at in result.all()
+        ]
+
+
 # async def get_provisioned_orders() -> list[tuple[int, str, OrderStatus]]:
 #     """Returns (order_id, panel_username, status) for every order that has a
 #     panel account -- i.e. everything past the pending/rejected payment stage.
