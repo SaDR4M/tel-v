@@ -30,14 +30,14 @@
   {
     "id": "plan_1m_80gb",
     "name": "80 گیگابایت / 30 روز",
-    "price": "360000",
+    "price": "380000",
     "data_limit_bytes": 85899345920,
     "duration_days": 30
   },
   {
     "id": "plan_1m_100gb",
     "name": "100 گیگابایت / 30 روز",
-    "price": "450000",
+    "price": "475000",
     "data_limit_bytes": 107374182400,
     "duration_days": 30
   },
