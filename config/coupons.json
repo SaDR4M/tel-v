@@ -2,5 +2,9 @@
   {
     "code": "FRIENDS",
     "toman_per_gb": 4500
+  },
+  {
+"code": "AVAL",
+"toman_per_gb": 4500
   }
 ]
