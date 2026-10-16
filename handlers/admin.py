@@ -5,9 +5,12 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from datetime import datetime, timedelta
 
+import aiohttp
+
 import database as db
 from config import settings
 from models import UNPROVISIONED_STATUSES
+from panel_api import panel, PanelAPIError
 from utils import safe_edit_text
 from handlers.test_plan import TEST_PLAN_ID
 
@@ -28,6 +31,7 @@ def _admin_menu():
     b.button(text="📊 فروش به تفکیک پلن", callback_data="admin:plans")
     b.button(text="🧭 وضعیت سفارش‌ها", callback_data="admin:funnel")
     b.button(text="👥 فروش به تفکیک خریدار", callback_data="admin:buyers")
+    b.button(text="📡 پنل در مقابل سفارش‌ها", callback_data="admin:panel")
     b.adjust(1)
     return b.as_markup()
 
@@ -212,6 +216,62 @@ def _funnel_report(all_rows) -> str:
     )
 
 
+def _panel_report(allocation, system, overview, panel_users, tracked_names) -> str:
+    """Reconcile panel-side volume against what the bot's orders account for.
+
+    Panel numbers come from the panel API (/api/admin/allocation sums
+    data_limit and used_traffic over ALL panel users); orders side only
+    counts panel users that belong to a provisioned order in our DB.
+    """
+    tracked = set(tracked_names)
+    by_name = {u["username"]: u for u in panel_users}
+    tracked_users = [by_name[n] for n in tracked if n in by_name]
+    missing = sorted(n for n in tracked if n not in by_name)
+    untracked = len(panel_users) - len(tracked_users)
+
+    p_assigned = int(allocation.get("created") or 0)
+    p_used = int(allocation.get("used") or 0)
+    o_assigned = sum(int(u.get("data_limit") or 0) for u in tracked_users)
+    o_used = sum(int(u.get("used_traffic") or 0) for u in tracked_users)
+
+    pkg = overview.get("subscription") or {}
+    pkg_limit = int(pkg.get("traffic_limit") or 0)
+    pkg_used = int(pkg.get("traffic_used") or 0)
+    pkg_left = max(pkg_limit - pkg_used, 0)
+
+    lines = [
+        "📡 <b>پنل در مقابل سفارش‌ها</b>",
+        "",
+        "<b>پنل:</b>",
+        f"▫️ واگذارشده: <b>{p_assigned / GB:,.2f} گیگابایت</b>",
+        f"▫️ مصرف‌شده: <b>{p_used / GB:,.2f} گیگابایت</b>",
+        f"▫️ پکیج ارائه‌دهنده: {pkg_left / GB:,.2f} باقی از "
+        f"{pkg_limit / GB:,.2f} گیگابایت (مصرف {pkg_used / GB:,.2f})",
+        "",
+        "<b>سفارش‌های ربات:</b>",
+        f"▫️ واگذارشده: <b>{o_assigned / GB:,.2f} گیگابایت</b> "
+        f"({len(tracked_users)} حساب)",
+        f"▫️ مصرف‌شده: <b>{o_used / GB:,.2f} گیگابایت</b>",
+        "",
+        "<b>تفاوت (پنل − سفارش‌ها):</b>",
+        f"▫️ واگذاری: <b>{(p_assigned - o_assigned) / GB:,.2f} گیگابایت</b> "
+        f"خارج از ربات ({untracked} کاربر)",
+        f"▫️ مصرف: <b>{(p_used - o_used) / GB:,.2f} گیگابایت</b> خارج از ربات",
+    ]
+    if missing:
+        lines.append(f"▫️ حساب ثبت‌شده که در پنل نیست: {len(missing)}")
+    lines += [
+        "",
+        f"▫️ کاربران پنل: {system.get('total_user', len(panel_users))} ("
+        f"{system.get('users_active', 0)} فعال / "
+        f"{system.get('users_limited', 0)} محدود / "
+        f"{system.get('users_expired', 0)} منقضی / "
+        f"{system.get('users_disabled', 0)} غیرفعال) — "
+        f"{system.get('online_users', 0)} آنلاین",
+    ]
+    return "\n".join(lines)
+
+
 @router.message(Command("admin"))
 async def cb_admin(message: Message):
     if not _is_admin(message.from_user.id):
@@ -295,4 +355,31 @@ async def cb_admin_buyers(callback: CallbackQuery):
     )
     for chunk in chunks[1:]:
         await callback.message.answer(chunk)
+    await callback.answer()
+
+
+@router.callback_query(F.data == "admin:panel")
+async def cb_admin_panel(callback: CallbackQuery):
+    if not _is_admin(callback.from_user.id):
+        await callback.answer()
+        return
+    try:
+        allocation = await panel.get_allocation()
+        system = await panel.get_system_stats()
+        overview = await panel.get_overview()
+        panel_users = await panel.get_users_list()
+    except (PanelAPIError, aiohttp.ClientError, TimeoutError) as e:
+        await safe_edit_text(
+            callback.message,
+            f"📡 خطا در ارتباط با پنل:\n<code>{e}</code>",
+            reply_markup=_report_menu(),
+        )
+        await callback.answer()
+        return
+    tracked = await db.get_all_panel_usernames()
+    await safe_edit_text(
+        callback.message,
+        _panel_report(allocation, system, overview, panel_users, tracked),
+        reply_markup=_report_menu(),
+    )
     await callback.answer()

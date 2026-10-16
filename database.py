@@ -212,6 +212,21 @@ async def get_sales_data() -> list[dict]:
         ]
 
 
+async def get_all_panel_usernames() -> list[str]:
+    """Every panel username attached to any provisioned order (all buyers,
+    unlike get_distinct_panel_usernames which is per-user) — used by the
+    admin panel-vs-orders reconciliation report."""
+    async with SessionLocal() as session:
+        result = await session.execute(
+            select(Order.panel_username, Order.target_panel_username)
+            .where(Order.status.notin_(UNPROVISIONED_STATUSES))
+        )
+        return sorted(
+            {n for panel_username, target in result.all()
+             for n in (panel_username, target) if n}
+        )
+
+
 async def get_all_orders_for_admin() -> list[dict]:
     """Every order regardless of status, with lifecycle fields (status,
     order_type) for the admin analytics reports — the funnel needs pending

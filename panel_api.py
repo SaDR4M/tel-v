@@ -56,6 +56,39 @@ class PanelClient:
         token = await self._get_token(session)
         return {"Authorization": f"Bearer {token}"}
 
+    async def _get_json(self, path: str, params: dict | None = None) -> dict:
+        """GET a JSON endpoint; network failures surface as PanelAPIError so
+        callers only ever handle one exception type."""
+        try:
+            async with aiohttp.ClientSession() as session:
+                headers = await self._headers(session)
+                async with session.get(
+                    f"{settings.PANEL_BASE_URL}{path}",
+                    headers=headers,
+                    params=params,
+                ) as resp:
+                    if resp.status != 200:
+                        raise PanelAPIError(
+                            f"GET {path} failed: {resp.status} {await resp.text()}"
+                        )
+                    return await resp.json()
+        except (aiohttp.ClientError, TimeoutError) as e:
+            raise PanelAPIError(f"Panel unreachable: {e}") from e
+
+    async def get_allocation(self) -> dict:
+        """How much volume this admin has handed out and how much of it is
+        used (/api/admin/allocation — bytes: created/used/unlimited)."""
+        return await self._get_json("/api/admin/allocation")
+
+    async def get_system_stats(self) -> dict:
+        """Panel version, user counts and traffic figures (/api/system)."""
+        return await self._get_json("/api/system")
+
+    async def get_overview(self) -> dict:
+        """Online user counts and the provider subscription package
+        (/api/overview — subscription.traffic_limit/traffic_used in bytes)."""
+        return await self._get_json("/api/overview")
+
     async def create_user(
         self,
         username: str,
