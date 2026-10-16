@@ -212,6 +212,42 @@ async def get_sales_data() -> list[dict]:
         ]
 
 
+async def get_all_orders_for_admin() -> list[dict]:
+    """Every order regardless of status, with lifecycle fields (status,
+    order_type) for the admin analytics reports — the funnel needs pending
+    and rejected orders too, which get_sales_data deliberately filters out."""
+    async with SessionLocal() as session:
+        result = await session.execute(
+            select(
+                Order.order_id,
+                Order.telegram_id,
+                User.telegram_username,
+                Order.plan_id,
+                Order.status,
+                Order.order_type,
+                Order.coupon_code,
+                Order.final_price,
+                Order.created_at,
+            )
+            .outerjoin(User, User.telegram_id == Order.telegram_id)
+            .order_by(Order.created_at.asc())
+        )
+        return [
+            {
+                "order_id": order_id,
+                "telegram_id": telegram_id,
+                "telegram_username": telegram_username,
+                "plan_id": plan_id,
+                "status": status,
+                "order_type": order_type,
+                "coupon_code": coupon_code,
+                "final_price": final_price,
+                "created_at": created_at,
+            }
+            for order_id, telegram_id, telegram_username, plan_id, status, order_type, coupon_code, final_price, created_at in result.all()
+        ]
+
+
 # async def get_provisioned_orders() -> list[tuple[int, str, OrderStatus]]:
 #     """Returns (order_id, panel_username, status) for every order that has a
 #     panel account -- i.e. everything past the pending/rejected payment stage.
