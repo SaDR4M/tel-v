@@ -15,7 +15,7 @@ from handlers.keyboards import (
     admin_review_keyboard,
     back_home,
 )
-from utils import dedupe_labels, safe_edit_text
+from utils import dedupe_labels, safe_edit_text, payment_card_line
 from datetime import datetime, timedelta
 
 router = Router()
@@ -150,10 +150,9 @@ def _renew_offer_text(plan: dict, coupon_code: str | None = None) -> str:
         f"{price_line}\n"
         f"حجم: {data_str}\n"
         f"مدت: {plan['duration_days']} روز\n\n"
-        f"مبلغ را به این مشخصات واریز کنید:\n\n"
-        f"💳 : <b>6219 8610 8648 5009</b>\n"
-        f"👤 : <b>صدرا آقاجانلو</b>\n\n"
-        f"پس از پرداخت، روی دکمه زیر بزنید تا ادامه دهید."
+        "مبلغ را به این مشخصات واریز کنید:\n\n"
+        f"{payment_card_line()}\n\n"
+        "پس از پرداخت، روی دکمه زیر بزنید تا ادامه دهید."
     )
 
 

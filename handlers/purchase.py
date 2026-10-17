@@ -16,6 +16,7 @@ from handlers.keyboards import (
     MENU_BUTTONS,
 )
 from panel_api import panel, PanelAPIError
+from utils import payment_card_line
 from datetime import datetime, timedelta
 
 router = Router()
@@ -102,8 +103,7 @@ def _offer_text(plan: dict, coupon_code: str | None = None) -> str:
         f"حجم: {data_str}\n"
         f"مدت: {plan['duration_days']} روز\n\n"
         "برای تکمیل خرید، مبلغ را به این کارت واریز کنید:\n\n"
-        "کارت: <b>6219 8610 8648 5009</b>\n"
-        "به نام: <b>صدرا آقاجانلو</b>\n\n"
+        f"{payment_card_line()}\n\n"
         "بعد از پرداخت، اسکرین‌شات رسید را همین‌جا بفرستید."
     )
 

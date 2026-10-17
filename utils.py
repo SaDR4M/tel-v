@@ -3,6 +3,20 @@ from collections import Counter
 import re
 from aiogram.exceptions import TelegramBadRequest
 
+# Card number without separator spaces: inside Persian (RTL) messages,
+# space-separated digit groups get laid out right-to-left by the bidi
+# algorithm and visually reverse — one continuous run keeps its order.
+# The LTR mark guards any client that re-resolves the run's direction.
+CARD_NUMBER = "\u200e6219861086485009"
+
+
+def payment_card_line() -> str:
+    """Card number + holder, direction-safe for RTL messages."""
+    return (
+        f"کارت: <code>{CARD_NUMBER}</code>\n"
+        "به نام: <b>صدرا آقاجانلو</b>"
+    )
+
 
 def dedupe_labels(labels: list[str]) -> list[str]:
     """Tag labels that would render identically (e.g. two subscriptions with
