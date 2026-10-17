@@ -54,16 +54,16 @@ class TierMenusTest(unittest.TestCase):
         self.assertNotIn("plan_u_unlimited", sums)  # replaced pair, no stale id
 
     def test_tier_info_marketing_copy(self):
-        # Every offered tier has an info text, and the unlimited one spells
-        # out both user counts and the overuse quality warning.
+        # Every offered tier has an info text; the unlimited one presents both
+        # versions (caps are NOT shown per marketing decision) and the
+        # overuse quality warning.
         tiers_present = {p.get("tier", "vip") for p in settings.PLANS}
         for tier in tiers_present:
             self.assertIn(tier, keyboards.TIER_INFO)
         info = keyboards.TIER_INFO["unlimited"]
-        self.assertIn("2 کاربر", info)
-        self.assertIn("3 کاربر", info)
-        self.assertIn("300 گیگ", info)
-        self.assertIn("400 گیگ", info)
+        self.assertIn("نسخه 2 کاربره", info)
+        self.assertIn("نسخه 3 کاربره", info)
+        self.assertNotIn("گیگ", info)   # caps deliberately hidden
         self.assertIn("افت کیفیت", info)
 
     def test_renewal_plans_menu_vip_only(self):
