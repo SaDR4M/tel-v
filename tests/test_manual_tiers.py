@@ -224,6 +224,49 @@ class MysubManualViewTest(unittest.TestCase):
         self.assertIn("https://sub/y", text)
 
 
+class RenewalScopeTest(unittest.TestCase):
+    """Cross-tier renewal must be impossible: eco/unlimited accounts are not
+    bot-owned (no panel_username) so they can never be renewed with the bot's
+    panel — a VIP account is only ever extended by VIP plans."""
+
+    @classmethod
+    def setUpClass(cls):
+        _run(db.init_db())
+
+    def test_manual_orders_never_reachable_via_renewal(self):
+        shopper = 999002
+        try:
+            eco = _run(db.create_order(
+                telegram_id=shopper, plan_id="plan_e_10gb",
+                requested_username="caps-shopper", receipt_file_id="t",
+                expire_at=datetime.now() + timedelta(days=30),
+            ))
+            vip = _run(db.create_order(
+                telegram_id=shopper, plan_id="plan_1m_25gb",
+                requested_username="caps-shopper", receipt_file_id="t",
+                expire_at=datetime.now() + timedelta(days=30),
+            ))
+            _run(db.set_order_status(vip, "approved", "caps_renewable_me"))
+            usernames = _run(db.get_distinct_panel_usernames(shopper))
+            self.assertEqual(usernames, ["caps_renewable_me"])
+        finally:
+            _run(db.delete_test_orders(shopper))
+
+    def test_low_renewable_message_hints_reorder_for_manual_tiers(self):
+        import handlers.renewal as renewal
+        manual_order = {"order_id": 1, "plan_id": "plan_e_10gb"}
+        with patch.object(renewal, "_fetch_renewable_subs", AsyncMock(return_value=[])), \
+             patch("database.get_active_orders", AsyncMock(return_value=[manual_order])):
+            text, kb = _run(renewal._show_renewal_list(999002))
+        self.assertIn("خرید مجدد", text)
+        self.assertTrue(len(kb.inline_keyboard), 1)
+
+        with patch.object(renewal, "_fetch_renewable_subs", AsyncMock(return_value=[])), \
+             patch("database.get_active_orders", AsyncMock(return_value=[])):
+            text, _ = _run(renewal._show_renewal_list(999002))
+        self.assertNotIn("اکونومی", text)
+
+
 class ManualLinkDbRoundTripTest(unittest.TestCase):
     """New DB helpers against the real dev DB (own rows, cleaned up)."""
     SHOP_TG = 999001

@@ -78,6 +78,15 @@ async def _show_renewal_list(telegram_id: int):
             "شما در حال حاضر اشتراکی که نیاز به تمدید داشته باشد ندارید.\n\n"
             "می‌توانید یک سرویس جدید خریداری کنید:"
         )
+        # Accounts with no bot-side panel username (eco/unlimited tiers) can't
+        # appear above — if the buyer still owns live orders, point their
+        # renewal path out explicitly instead of a generic dead end.
+        orders = await db.get_active_orders(telegram_id=telegram_id)
+        if orders:
+            text += (
+                "\n\n💡 سرویس‌های دسته‌ی اکونومی و نامحدود با خرید مجدد همان "
+                "اشتراک تمدید می‌شوند — سفارش جدید بدهید تا سرویس شما ادامه پیدا کند."
+            )
         return text, no_renewable_subs_keyboard()
 
     text = "🔄 <b>تمدید سرویس</b>\n\nاشتراکی که می‌خواهید تمدید کنید را انتخاب کنید:"
