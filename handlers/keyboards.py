@@ -64,7 +64,7 @@ def tiers_menu() -> InlineKeyboardMarkup:
     """Category menu: VIP (auto-provisioned), Eco and Unlimited (created
     manually by the admin, link delivered as a reply to the order)."""
     b = InlineKeyboardBuilder()
-    b.button(text="حرفه‌ای — پرسرعت و پایدار", callback_data="tierplans:vip")
+    b.button(text="VIP — پرسرعت و پایدار", callback_data="tierplans:vip")
     b.button(text="اکونومی — کم‌خرج", callback_data="tierplans:eco")
     b.button(text="نامحدود", callback_data="tierplans:unlimited")
     b.button(text="⬅️ بازگشت", callback_data="menu:home")
@@ -74,30 +74,32 @@ def tiers_menu() -> InlineKeyboardMarkup:
 
 # Marketing copy shown above each tier's plan list. The manual-delivery
 # mechanics of eco/unlimited stay invisible to buyers.
-# Marketing copy shown above each tier's plan list. The manual-delivery
-# mechanics of eco/unlimited stay invisible to buyers.
 TIER_INFO = {
     "vip": (
-        "<b>پلن حرفه‌ای</b>\n\n"
-        "اگر سرعت و پایداری براتون مهمه، این همون پلنه:\n"
-        "• بازی بدون لگ و قطعی\n"
-        "• کار با هوش مصنوعی بدون ریست\n"
-        "• تماشا و دانلود بدون انتظار\n\n"
-        "حتی در شلوغ‌ترین ساعات روز، سرعت شما پایدار می‌مونه."
+        "<b>پلن VIP</b>\n\n"
+        "• سرعت عالی و اتصال پایدار\n"
+        "• مناسب برای استفاده از ابزارهای هوش مصنوعی (AI)\n"
+        "• ایده‌آل برای برنامه‌نویسی و کدنویسی\n"
+        "• کیفیت بالا و تجربه‌ای روان، بدون قطعی"
     ),
     "eco": (
         "<b>پلن اکونومی</b>\n\n"
-        "برای کارهای روزانه، با کمترین هزینه:\n"
-        "• تلگرام و اینستاگرام همیشه در دسترس\n"
-        "• وب‌گردی و چت بدون قطعی\n\n"
-        "کیفیت معمولی، قیمت کم. اگر گیم یا هوش مصنوعی کار می‌کنید، پلن حرفه‌ای مناسب‌تره."
+        "کیفیت مناسب برای استفاده روزمره\n\n"
+        "• مناسب برای وب‌گردی و استفاده روزانه\n"
+        "• مناسب برای شبکه‌های اجتماعی و پیام‌رسان‌ها\n"
+        "• سرعت و کیفیت قابل‌قبول برای کارهای معمول\n\n"
+        "اگر گیم یا هوش مصنوعی کار می‌کنید، پلن VIP مناسب‌تره."
     ),
     "unlimited": (
         "<b>پلن نامحدود</b>\n\n"
-        "با یک خرید، چند نفر استفاده می‌کنن:\n"
-        "• نامحدود: 2 کاربر همزمان با 300 گیگ حجم\n"
-        "• نامحدود ویژه: 3 کاربر همزمان با 400 گیگ حجم\n\n"
-        "توجه: فقط همین تعداد کاربر اعلام‌شده می‌تونن بدون افت کیفیت و سرعت استفاده کنن."
+        "آزادی بیشتر، بدون دغدغه حجم\n\n"
+        "• حجم بالا برای مصرف آزاد\n"
+        "• مناسب برای استفاده مداوم و طولانی‌مدت\n"
+        "• دو نسخه:\n"
+        "   نسخه 2 کاربره (سقف 300 گیگ)\n"
+        "   نسخه 3 کاربره (سقف 400 گیگ)\n\n"
+        "مناسب برای استفاده روزمره، وب‌گردی و تماشای محتوا.\n\n"
+        "توجه: برای حفظ کیفیت و سرعت، تعداد کاربر همان تعداد اعلام‌شده بماند؛ کاربرِ بیشتر باعث افت کیفیت می‌شود."
     ),
 }
 
