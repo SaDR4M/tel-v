@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 TEST_PLAN_ID = "test_1d_250mb"
 TEST_DATA_LIMIT_BYTES = 250 * 1024 * 1024  # 250 MB
-TEST_DURATION_DAYS = 1
+TEST_DURATION_DAYS = 7
 
 
 @router.message(F.text == "اکانت تست")
@@ -32,7 +32,7 @@ async def cb_apply_test(callback: CallbackQuery):
     order_id = await db.create_order(
         telegram_id=callback.from_user.id,
         plan_id=TEST_PLAN_ID,
-        expire_at = datetime.now() + timedelta(days=1),
+        expire_at=datetime.now() + timedelta(days=TEST_DURATION_DAYS),
         requested_username=requested_username,
         receipt_file_id="test_plan_no_receipt",
     )
@@ -87,7 +87,7 @@ async def cb_apply_menu_test(callback: CallbackQuery):
     order_id = await db.create_order(
         telegram_id=callback.from_user.id,
         plan_id=TEST_PLAN_ID,
-        expire_at = datetime.now() + timedelta(days=1),
+        expire_at=datetime.now() + timedelta(days=TEST_DURATION_DAYS),
         requested_username=requested_username,
         receipt_file_id="test_plan_no_receipt",
     )
