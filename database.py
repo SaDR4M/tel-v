@@ -114,6 +114,17 @@ async def delete_test_orders(telegram_id: int):
     """Erase every order of a test shopper — used by automated tests that
     write throwaway rows into the real dev database."""
     async with SessionLocal() as session:
+        order_ids = (
+            await session.execute(
+                select(Order.order_id).where(Order.telegram_id == telegram_id)
+            )
+        ).scalars().all()
+        if order_ids:
+            await session.execute(
+                delete(NotificationLog).where(
+                    NotificationLog.order_id.in_(order_ids)
+                )
+            )
         await session.execute(delete(Order).where(Order.telegram_id == telegram_id))
         await session.commit()
 

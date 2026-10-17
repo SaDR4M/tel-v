@@ -90,6 +90,7 @@ class Support(Base):
 class NotificationKind(str, enum.Enum):
     USAGE_90 = "usage_90"
     EXPIRY_2D = "expiry_2d"
+    UNUSED_YET = "unused_yet"   # onboarding nudge for never-used accounts
 
 
 class NotificationStatus(str, enum.Enum):

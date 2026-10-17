@@ -26,6 +26,12 @@ celery_app.conf.update(
             "task": "tasks.subs.scan_subscriptions",
             "schedule": crontab(minute="*/60"),
         },
+        # One-time nudge for test accounts that were never used. The task
+        # itself skips orders younger than 15 minutes and never sends twice.
+        "unused-test-nudge": {
+            "task": "tasks.subs.send_unused_test_nudge",
+            "schedule": crontab(minute="*/1"),
+        },
     }
 )
 
