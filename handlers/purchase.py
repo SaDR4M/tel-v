@@ -6,7 +6,6 @@ from aiogram.fsm.state import State, StatesGroup
 
 import database as db
 from config import settings
-from utils import make_panel_username
 from handlers.keyboards import plans_menu, confirm_purchase, admin_review_keyboard, back_home, MENU_BUTTONS
 from panel_api import panel, PanelAPIError
 from datetime import datetime, timedelta
@@ -177,12 +176,11 @@ async def receive_username(message: Message, state: FSMContext):
         await state.clear()
         return
 
-    final_username = make_panel_username(raw, message.from_user.id)
-    await state.update_data(requested_username=raw, panel_username=final_username)
+    await state.update_data(requested_username=raw)
     await state.set_state(PurchaseFlow.waiting_for_receipt)
 
     await message.answer(
-        f"اشتراک شما با این نام ذخیره خواهد شد: <code>{final_username}</code>\n\n"
+        f"اشتراک شما با این نام ذخیره خواهد شد: <code>{raw}</code>\n\n"
         f"📎 لطفاً عکس رسید پرداخت را ارسال کنید.",
         reply_markup=back_home(),
     )
@@ -198,10 +196,9 @@ async def receive_receipt(message: Message, state: FSMContext, bot: Bot):
     data = await state.get_data()
     plan_id = data.get("plan_id")
     requested_username = data.get("requested_username")
-    panel_username = data.get("panel_username")
     plan = settings.get_plan(plan_id)
     expire_at = datetime.now() + timedelta(days=29)
-    if not plan or not panel_username:
+    if not plan or not requested_username:
         await message.answer("مشکلی پیش آمد، لطفاً دوباره با /start شروع کنید.")
         await state.clear()
         return
@@ -225,8 +222,7 @@ async def receive_receipt(message: Message, state: FSMContext, bot: Bot):
     caption = (
         f"🆕 <b>سفارش جدید #{order_id}</b>\n"
         f"کاربر: {uname} (شناسه: <code>{message.from_user.id}</code>)\n"
-        f"نام درخواستی: {requested_username}\n"
-        f"نام کاربری پنل: <code>{panel_username}</code>\n"
+        f"نام درخواستی: <code>{requested_username}</code>\n"
         f"پلن: {plan['name']} — {plan['price']} {settings.CURRENCY}"
         f"{coupon_line}"
     )

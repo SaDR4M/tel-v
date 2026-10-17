@@ -200,10 +200,20 @@ def scan_subscriptions(*args, **kwargs):
     return None
 
 
+def _sub_title(order) -> str:
+    """User-facing subscription title for reminder texts: the plan's
+    nickname-free display name. Falls back to the panel username only if
+    the configured plan has been deleted from plans.json."""
+    plan = settings.get_plan(order.plan_id)
+    if plan:
+        return plan["name"]
+    return order.panel_username or "شما"
+
+
 @shared_task(
     bind=True,
     max_retries=3,
-    # autoretry_for=(Exception,),
+    # autoretry_for=(Exception,)
 )
 def send_expire_reminder(*args, **kwargs):
     orders = asyncio.run(_scan_subscriptions_expire_date())
@@ -218,7 +228,7 @@ def send_expire_reminder(*args, **kwargs):
         text = (
             "⚠️ اشتراک «{}» شما در آستانه‌ی پایان است.\n"
             "برای جلوگیری از قطع شدن سرویس، لطفاً اشتراک خود را تمدید کنید."
-        ).format(order.panel_username)
+        ).format(_sub_title(order))
 
         try:
             asyncio.run(_send_telegram_message(order.telegram_id, text))
@@ -317,7 +327,7 @@ def send_limit_reminder(*args, **kwargs):
             text = (
                 "⚠️ بیش از ۹۰٪ از حجم اشتراک «{}» شما مصرف شده است.\n"
                 "برای جلوگیری از قطع شدن سرویس، لطفاً نسبت به تمدید یا خرید سرویس جدید اقدام کنید."
-            ).format(order.panel_username)
+            ).format(_sub_title(order))
 
             try:
                 asyncio.run(_send_telegram_message(order.telegram_id, text))

@@ -5,7 +5,9 @@ from aiogram.filters import Command
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 import database as db
+from config import settings
 from panel_api import panel, PanelAPIError
+from utils import dedupe_labels
 from handlers.keyboards import back_home, main_menu, plans_menu
 
 router = Router()
@@ -16,6 +18,52 @@ STATUS_LABELS = {
     "limited": "محدود شده (اتمام حجم)",
     "expired": "منقضی شده",
 }
+
+
+def build_orders_keyboard(orders, names: dict[str, str] | None = None) -> InlineKeyboardMarkup:
+    """One button per subscription. Users see the nickname they picked when
+    ordering plus the plan size — the internal panel username stays hidden
+    in callback_data and only appears as a fallback for legacy accounts."""
+    names = names or {}
+    entries = []
+    for order in orders:
+        entries.append((order, _order_label(order, names)))
+    # Two orders can share a nickname (e.g. "Sadra" bought twice) -> identical
+    # buttons; tag consecutive duplicates so the lists stay unambiguous.
+    labels = dedupe_labels([entry[1] for entry in entries])
+    buttons = []
+    for (order, _), label in zip(entries, labels):
+        buttons.append(
+            [
+                InlineKeyboardButton(
+                    text=label,
+                    callback_data=f"order:{order.get('order_id')}",
+                )
+            ]
+        )
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def _order_label(order: dict, names: dict[str, str]) -> str:
+    size = ""
+    plan = settings.get_plan(order.get("plan_id") or "")
+    if plan:
+        data_limit = int(plan.get("data_limit_bytes") or 0)
+        size = "نامحدود" if data_limit == 0 else f"{data_limit / 1_073_741_824:,.0f} گیگ"
+        size = f" — {size}"
+    nickname = names.get(order.get("panel_username"))
+    if not nickname:
+        req = order.get("requested_username")
+        # A requested name identical to the panel username (legacy/renewal
+        # rows) is not a nickname, so don't parade the internal name around.
+        if req and req != order.get("panel_username"):
+            nickname = req
+    if nickname:
+        return f"«{nickname}»{size}"
+    panel_username = order.get("panel_username")
+    if panel_username:
+        return f"اشتراک {panel_username}{size}"
+    return f"اشتراک{size}"
 
 
 def _fmt_bytes(n: int) -> str:
@@ -59,19 +107,6 @@ async def _build_sub_text(order_id: int) -> str:
     )
 
 
-def build_orders_keyboard(orders):
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(
-                    text=f"اشتراک {order.get("panel_username")}",
-                    callback_data=f"order:{order.get("order_id")}",
-                )
-            ]
-            for order in orders
-        ]
-    )
-
 @router.message(Command("mysub"))
 async def mysub_handler(message: Message):
     orders = await db.get_active_orders(
@@ -81,9 +116,10 @@ async def mysub_handler(message: Message):
         return await message.answer(
             "اشتراکی برای شما یافت نشد"
         )
+    names = await db.get_display_names(message.from_user.id)
     await message.answer(
         "اشتراک های شما:\n",
-        reply_markup=build_orders_keyboard(orders),
+        reply_markup=build_orders_keyboard(orders, names),
     )
 
 @router.callback_query(F.data.startswith("order:"))
@@ -130,9 +166,10 @@ async def mysub_callback(callback: CallbackQuery):
         )
         return
 
+    names = await db.get_display_names(callback.from_user.id)
     await callback.answer(
         "📦 اشتراک‌های فعال شما:",
-        reply_markup=build_orders_keyboard(orders),
+        reply_markup=build_orders_keyboard(orders, names),
     )
 
 
@@ -152,9 +189,10 @@ async def mysub_menu_callback(callback: CallbackQuery):
         await callback.answer()
         return
 
+    names = await db.get_display_names(callback.from_user.id)
     await callback.message.edit_text(
         text="📦 اشتراک‌های فعال شما:",
-        reply_markup=build_orders_keyboard(orders),
+        reply_markup=build_orders_keyboard(orders, names),
     )
     await callback.answer()
 

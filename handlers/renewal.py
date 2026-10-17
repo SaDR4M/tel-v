@@ -15,7 +15,7 @@ from handlers.keyboards import (
     admin_review_keyboard,
     back_home,
 )
-from utils import safe_edit_text
+from utils import dedupe_labels, safe_edit_text
 from datetime import datetime, timedelta
 
 router = Router()
@@ -43,6 +43,7 @@ def _needs_renewal(user: dict) -> bool:
 async def _fetch_renewable_subs(telegram_id: int) -> list[dict]:
     panel_usernames = await db.get_distinct_panel_usernames(telegram_id)
     renewable = []
+    names = await db.get_display_names(telegram_id)
     for username in panel_usernames:
         try:
             user = await panel.get_user(username)
@@ -54,12 +55,19 @@ async def _fetch_renewable_subs(telegram_id: int) -> list[dict]:
             status_fa = STATUS_LABELS.get(user.get("status", ""), user.get("status", ""))
             used = _fmt_bytes(user.get("used_traffic", 0))
             limit = _fmt_bytes(user.get("data_limit", 0))
+            nickname = names.get(username)
+            who = f"«{nickname}»" if nickname else username
             renewable.append(
                 {
                     "panel_username": username,
-                    "label": f"{username} — {status_fa} — {used}/{limit}",
+                    "label": f"{who} — {status_fa} — {used}/{limit}",
                 }
             )
+    # Duplicate nicknames (same buyer, two accounts) get #1/#2 tags so the
+    # selection list stays unambiguous; ordering is most-recent-first.
+    labels = dedupe_labels([entry["label"] for entry in renewable])
+    for entry, label in zip(renewable, labels):
+        entry["label"] = label
     return renewable
 
 

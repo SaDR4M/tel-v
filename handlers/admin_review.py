@@ -17,6 +17,25 @@ def _is_admin(user_id: int) -> bool:
     return user_id in settings.ADMIN_USER_IDS
 
 
+async def _free_panel_username(base: str) -> str:
+    """Return `base`, or the first numbered variant (base_2, base_3, ...) the
+    panel doesn't have yet.
+
+    Different buyers never collide (their Telegram id is in the name); the
+    same buyer requesting the same name twice did, which left the second
+    order stuck in pending. `get_user` returns None on 404 and raises
+    PanelAPIError on real failures, which the caller handles.
+    """
+    candidate = base
+    n = 1
+    while await panel.get_user(candidate):
+        n += 1
+        candidate = f"{base}_{n}"
+        if n > 20:
+            raise PanelAPIError(f"can't find a free username variant for {base!r}")
+    return candidate
+
+
 @router.callback_query(F.data.startswith("admin_approve:"))
 async def cb_admin_approve(callback: CallbackQuery, bot: Bot):
     if not _is_admin(callback.from_user.id):
@@ -56,10 +75,9 @@ async def cb_admin_approve(callback: CallbackQuery, bot: Bot):
             chat_id=telegram_id,
             text=(
                 f"🎉 <b>تمدید با موفقیت انجام شد!</b>\n\n"
-                f"سرویس: <code>{panel_username}</code>\n"
                 f"پلن جدید: {plan['name']}\n\n"
-                f"لینک اشتراک شما تغییری نکرده و همچنان معتبر است."
-                f"لینک اشتراک:\n<code>{sub_url}</code>\n\n"
+                f"لینک اشتراک شما تغییری نکرده و همچنان معتبر است:\n"
+                f"<code>{sub_url}</code>"
             ),
         )
         await callback.message.edit_caption(
@@ -68,13 +86,16 @@ async def cb_admin_approve(callback: CallbackQuery, bot: Bot):
         await callback.answer("تایید شد")
         return
     else:
-        panel_username = await db.get_panel_username(order_id) or make_panel_username(
-            order["requested_username"], telegram_id
-        )
-        logger.error(panel_username)
-        logger.error(await db.get_panel_username(order_id))
+        panel_username = await db.get_panel_username(order_id)
 
         try:
+            if not panel_username:
+                base = make_panel_username(order["requested_username"], telegram_id)
+                # Two purchases with the same requested name would collide on
+                # create_user, so probe the panel and pick the first free variant.
+                panel_username = await _free_panel_username(base)
+                logger.info("Panel username for order %s: %s", order_id, panel_username)
+
             user_obj = await panel.create_user(
                 username=panel_username,
                 telegram_id=telegram_id,

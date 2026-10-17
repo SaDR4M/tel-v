@@ -1,5 +1,24 @@
+from collections import Counter
+
 import re
 from aiogram.exceptions import TelegramBadRequest
+
+
+def dedupe_labels(labels: list[str]) -> list[str]:
+    """Tag labels that would render identically (e.g. two subscriptions with
+    the same nickname and plan: «Sadra» — 10 گیگ showed twice) with #1, #2, ...
+    Uniqueness there comes from the list position, so it's deterministic:
+    #1 is the most recent order. Display-only; nothing is renamed."""
+    total = Counter(labels)
+    seen: Counter = Counter()
+    out = []
+    for label in labels:
+        if total[label] > 1:
+            seen[label] += 1
+            out.append(f"{label} #{seen[label]}")
+        else:
+            out.append(label)
+    return out
 
 
 def sanitize_username(raw: str) -> str:

@@ -212,6 +212,30 @@ async def get_sales_data() -> list[dict]:
         ]
 
 
+async def get_display_names(telegram_id: int) -> dict[str, str]:
+    """panel_username -> the user-facing nickname the buyer picked when
+    ordering (requested_username of the purchase order that created the
+    account). Accounts without one — or a legacy/manual account — get no
+    entry and callers fall back to the raw panel username. Renewal orders
+    are excluded: they store target_panel_username as requested_username,
+    which is not a nickname."""
+    async with SessionLocal() as session:
+        result = await session.execute(
+            select(Order.panel_username, Order.requested_username)
+            .where(
+                Order.telegram_id == telegram_id,
+                Order.order_type == "purchase",
+                Order.panel_username.isnot(None),
+                Order.status.notin_(UNPROVISIONED_STATUSES),
+            )
+        )
+        names: dict[str, str] = {}
+        for panel_username, requested in result.all():
+            if panel_username and requested:
+                names.setdefault(panel_username, requested)
+        return names
+
+
 async def get_all_panel_usernames() -> list[str]:
     """Every panel username attached to any provisioned order (all buyers,
     unlike get_distinct_panel_usernames which is per-user) — used by the
