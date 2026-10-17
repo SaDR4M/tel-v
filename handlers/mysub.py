@@ -8,9 +8,22 @@ import database as db
 from config import settings
 from panel_api import panel, PanelAPIError
 from utils import dedupe_labels
-from handlers.keyboards import back_home, main_menu, plans_menu
+from handlers.keyboards import back_home, main_menu, tiers_menu
 
 router = Router()
+
+MANUAL_PREPARING_TEXT = (
+    "⏳ سرویس شما در حال آماده‌سازی است.\n\n"
+    "لینک اکانت به‌زودی توسط پشتیبانی برای شما ارسال می‌شود."
+)
+
+MANUAL_DELIVERED_TEMPLATE = (
+    "📱 <b>اشتراک شما</b>\n\n"
+    "لینک اشتراک شما آماده است:\n"
+    "<code>{link}</code>\n\n"
+    "این لینک را در اپلیکیشن خود وارد کنید. "
+    "برای دریافت مجدد، از «🛠 سرویس‌های من» استفاده کنید."
+)
 
 STATUS_LABELS = {
     "active": "فعال",
@@ -74,11 +87,18 @@ def _fmt_bytes(n: int) -> str:
 
 
 async def _build_sub_text(order_id: int) -> str:
-    panel_username = await db.get_panel_username(order_id)
-    print(order_id)
-    print(panel_username)
+    order = await db.get_order(order_id)
+    if not order:
+        return "سفارش پیدا نشد."
+
+    panel_username = order.get("panel_username")
     if not panel_username:
-        return "شما هنوز اشتراک فعالی ندارید. از «💳 لیست قیمت / خرید اشتراک» برای تهیه اشتراک استفاده کنید."
+        # Manual-tier order (no bot panel account): the admin delivers the
+        # link by replying to the order in the admin group.
+        manual_link = (order.get("manual_link") or "").strip()
+        if manual_link:
+            return MANUAL_DELIVERED_TEMPLATE.format(link=manual_link)
+        return MANUAL_PREPARING_TEXT
 
     try:
         user = await panel.get_user(panel_username)
@@ -162,7 +182,7 @@ async def mysub_callback(callback: CallbackQuery):
             """
             شما هنوز اشتراک فعالی ندارید
             """,
-            reply_markup=plans_menu()
+            reply_markup=tiers_menu()
         )
         return
 
@@ -184,7 +204,7 @@ async def mysub_menu_callback(callback: CallbackQuery):
             text="""
             شما هنوز اشتراک فعالی ندارید
             """,
-            reply_markup=plans_menu()
+            reply_markup=tiers_menu()
         )
         await callback.answer()
         return

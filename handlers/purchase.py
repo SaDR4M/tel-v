@@ -6,7 +6,7 @@ from aiogram.fsm.state import State, StatesGroup
 
 import database as db
 from config import settings
-from handlers.keyboards import plans_menu, confirm_purchase, admin_review_keyboard, back_home, MENU_BUTTONS
+from handlers.keyboards import tiers_menu, plans_menu, confirm_purchase, admin_review_keyboard, back_home, MENU_BUTTONS
 from panel_api import panel, PanelAPIError
 from datetime import datetime, timedelta
 
@@ -22,23 +22,36 @@ class PurchaseFlow(StatesGroup):
 @router.message(F.text == "خرید اشتراک جدید")
 async def cb_plans(callback: CallbackQuery):
     await callback.answer(
-        "📋 <b>پلن‌های موجود</b>\n\nیکی را انتخاب کنید:",
-        reply_markup=plans_menu(),
+        "🛒 <b>انتخاب دسته‌بندی</b>\n\nنوع اشتراک مورد نظر را انتخاب کنید:",
+        reply_markup=tiers_menu(),
     )
 
 @router.callback_query(F.data == "menu:plans")
 async def menu_plans(callback: CallbackQuery):
     await callback.message.edit_text(
-        "📋 <b>پلن‌های موجود</b>\n\nیکی را انتخاب کنید:",
-        reply_markup=plans_menu(),
+        "🛒 <b>انتخاب دسته‌بندی</b>\n\nنوع اشتراک مورد نظر را انتخاب کنید:",
+        reply_markup=tiers_menu(),
+    )
+    await callback.answer()
+
+@router.callback_query(F.data.startswith("tierplans:"))
+async def tier_plans(callback: CallbackQuery):
+    tier = callback.data.split(":", 1)[1]
+    plan_count = sum(1 for p in settings.PLANS if p.get("tier", "vip") == tier)
+    if not plan_count:
+        await callback.answer("دسته‌بندی یافت نشد.", show_alert=True)
+        return
+    await callback.message.edit_text(
+        f"سفارش جدید {plan_count} پلن فعال دارد؛ یکی را انتخاب کنید:",
+        reply_markup=plans_menu(tier),
     )
     await callback.answer()
 
 @router.message(Command("plans"))
 async def cmd_plans(message: Message):
     await message.answer(
-        "📋 <b>پلن‌های موجود</b>\n\nیکی را انتخاب کنید:",
-        reply_markup=plans_menu(),
+        "🛒 <b>انتخاب دسته‌بندی</b>\n\nنوع اشتراک مورد نظر را انتخاب کنید:",
+        reply_markup=tiers_menu(),
     )
 
 

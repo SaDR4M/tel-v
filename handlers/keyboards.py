@@ -60,14 +60,31 @@ main_reply_keyboard = ReplyKeyboardMarkup(
     is_persistent=True,
 )
 
-def plans_menu() -> InlineKeyboardMarkup:
+def tiers_menu() -> InlineKeyboardMarkup:
+    """Category menu: VIP (auto-provisioned), Eco and Unlimited (created
+    manually by the admin, link delivered as a reply to the order)."""
+    b = InlineKeyboardBuilder()
+    b.button(text="✨ VIP — کیفیت بالا", callback_data="tierplans:vip")
+    b.button(text="🪙 اکونومی — اتصال مستقیم", callback_data="tierplans:eco")
+    b.button(text="♾️ نامحدود — تا 400 گیگ", callback_data="tierplans:unlimited")
+    b.button(text="⬅️ بازگشت", callback_data="menu:home")
+    b.adjust(1)
+    return b.as_markup()
+
+
+def plans_menu(tier: str) -> InlineKeyboardMarkup:
+    """Plan list for one tier. `manual` tiers are provisioned by the admin
+    and get their link delivered by reply to the order — flagged in the UI."""
     b = InlineKeyboardBuilder()
     for plan in settings.PLANS:
-        b.button(
-            text=f"{plan['name']} — {plan['price']} {settings.CURRENCY}",
-            callback_data=f"buy:{plan['id']}",
-        )
-    b.button(text="⬅️ بازگشت", callback_data="menu:home")
+        if plan.get("tier", "vip") != tier:
+            continue
+        if plan.get("manual"):
+            label = f"{plan['name']} — {plan['price']} {settings.CURRENCY} (لینک دستی)"
+        else:
+            label = f"{plan['name']} — {plan['price']} {settings.CURRENCY}"
+        b.button(text=label, callback_data=f"buy:{plan['id']}")
+    b.button(text="⬅️ بازگشت", callback_data="menu:plans")
     b.adjust(1)
     return b.as_markup()
 
@@ -118,8 +135,13 @@ def no_renewable_subs_keyboard() -> InlineKeyboardMarkup:
 
 
 def renewal_plans_menu() -> InlineKeyboardMarkup:
+    """Renewal plan list. Eco/Unlimited are manual-tier products without a
+    bot panel account, so renewals for them are handled by the admin —
+    only VIP plans are offered for automated renewal."""
     b = InlineKeyboardBuilder()
     for plan in settings.PLANS:
+        if plan.get("tier", "vip") != "vip":
+            continue
         b.button(
             text=f"{plan['name']} — {plan['price']} {settings.CURRENCY}",
             callback_data=f"renew_plan:{plan['id']}",

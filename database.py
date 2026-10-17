@@ -1,4 +1,4 @@
-from sqlalchemy import select, update, bindparam
+from sqlalchemy import select, update, delete, bindparam
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 
 from config import settings
@@ -38,6 +38,8 @@ def _ensure_order_columns(conn):
         conn.exec_driver_sql("ALTER TABLE orders ADD COLUMN coupon_code VARCHAR")
     if "final_price" not in existing:
         conn.exec_driver_sql("ALTER TABLE orders ADD COLUMN final_price INTEGER")
+    if "manual_link" not in existing:
+        conn.exec_driver_sql("ALTER TABLE orders ADD COLUMN manual_link VARCHAR")
 
 
 async def upsert_user(telegram_id: int, telegram_username: str | None):
@@ -108,6 +110,14 @@ async def set_order_admin_message(order_id: int, admin_message_id: int):
             await session.commit()
 
 
+async def delete_test_orders(telegram_id: int):
+    """Erase every order of a test shopper — used by automated tests that
+    write throwaway rows into the real dev database."""
+    async with SessionLocal() as session:
+        await session.execute(delete(Order).where(Order.telegram_id == telegram_id))
+        await session.commit()
+
+
 async def get_order(order_id: int) -> dict | None:
     async with SessionLocal() as session:
         order = await session.get(Order, order_id)
@@ -123,6 +133,39 @@ async def set_order_status(order_id: int, status: str, panel_username: str | Non
             order.status = status
             order.panel_username = panel_username
             await session.commit()
+
+
+async def set_order_expire_at(order_id: int, expire_at: datetime):
+    """Fix up the expire date after approval — create_order stamps a generic
+    29-day window, but the approved plan may state a different duration."""
+    async with SessionLocal() as session:
+        order = await session.get(Order, order_id)
+        if order:
+            order.expire_at = expire_at
+            await session.commit()
+
+
+async def set_manual_link(order_id: int, manual_link: str):
+    """Store the subscription URL the admin delivered for a manual-tier
+    order; mysub shows it instead of a live panel account."""
+    async with SessionLocal() as session:
+        order = await session.get(Order, order_id)
+        if order:
+            order.manual_link = manual_link
+            await session.commit()
+
+
+async def get_order_by_admin_message(admin_message_id: int) -> dict | None:
+    """Order whose receipt was posted into the admin group as this message —
+    used to route admin replies (manual link delivery) to the right order."""
+    async with SessionLocal() as session:
+        result = await session.execute(
+            select(Order).where(Order.admin_message_id == admin_message_id).limit(1)
+        )
+        order = result.scalar_one_or_none()
+        if not order:
+            return None
+        return {c.name: getattr(order, c.name) for c in order.__table__.columns}
 
 
 async def has_used_plan(telegram_id: int, plan_id: str) -> bool:

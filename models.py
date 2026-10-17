@@ -70,6 +70,9 @@ class Order(Base):
     receipt_file_id: Mapped[str | None] = mapped_column(String, nullable=True)
     admin_message_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     panel_username: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Manual-tier orders (eco/unlimited): the admin creates the account
+    # outside the bot and delivers the subscription URL saved here.
+    manual_link: Mapped[str | None] = mapped_column(String, nullable=True)
     coupon_code: Mapped[str | None] = mapped_column(String, nullable=True)  # coupon applied at purchase, if any
     final_price: Mapped[int | None] = mapped_column(Integer, nullable=True)  # amount actually paid (toman)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())

@@ -4,48 +4,127 @@
     "name": "10 گیگابایت / 30 روز",
     "price": "50000",
     "data_limit_bytes": 10737418240,
-    "duration_days": 30
+    "duration_days": 30,
+    "tier": "vip"
   },
   {
     "id": "plan_1m_15gb",
     "name": "15 گیگابایت / 30 روز",
     "price": "75000",
     "data_limit_bytes": 16106127360,
-    "duration_days": 30
+    "duration_days": 30,
+    "tier": "vip"
   },
   {
     "id": "plan_1m_25gb",
     "name": "25 گیگابایت / 30 روز",
     "price": "125000",
     "data_limit_bytes": 26843545600,
-    "duration_days": 30
+    "duration_days": 30,
+    "tier": "vip"
   },
   {
     "id": "plan_1m_50gb",
     "name": "50 گیگابایت / 30 روز",
     "price": "240000",
     "data_limit_bytes": 53687091200,
-    "duration_days": 30
+    "duration_days": 30,
+    "tier": "vip"
   },
   {
     "id": "plan_1m_80gb",
     "name": "80 گیگابایت / 30 روز",
     "price": "380000",
     "data_limit_bytes": 85899345920,
-    "duration_days": 30
+    "duration_days": 30,
+    "tier": "vip"
   },
   {
     "id": "plan_1m_100gb",
     "name": "100 گیگابایت / 30 روز",
     "price": "475000",
     "data_limit_bytes": 107374182400,
-    "duration_days": 30
+    "duration_days": 30,
+    "tier": "vip"
   },
   {
     "id": "plan_1m_200gb",
     "name": "200 گیگابایت / 30 روز",
     "price": "850000",
     "data_limit_bytes": 214748364800,
-    "duration_days": 30
+    "duration_days": 30,
+    "tier": "vip"
+  },
+  {
+    "id": "plan_e_10gb",
+    "name": "10 گیگ / 30 روز (اکونومی)",
+    "price": "38000",
+    "data_limit_bytes": 10737418240,
+    "duration_days": 30,
+    "tier": "eco",
+    "manual": true
+  },
+  {
+    "id": "plan_e_15gb",
+    "name": "15 گیگ / 30 روز (اکونومی)",
+    "price": "57000",
+    "data_limit_bytes": 16106127360,
+    "duration_days": 30,
+    "tier": "eco",
+    "manual": true
+  },
+  {
+    "id": "plan_e_25gb",
+    "name": "25 گیگ / 30 روز (اکونومی)",
+    "price": "95000",
+    "data_limit_bytes": 26843545600,
+    "duration_days": 30,
+    "tier": "eco",
+    "manual": true
+  },
+  {
+    "id": "plan_e_50gb",
+    "name": "50 گیگ / 30 روز (اکونومی)",
+    "price": "190000",
+    "data_limit_bytes": 53687091200,
+    "duration_days": 30,
+    "tier": "eco",
+    "manual": true
+  },
+  {
+    "id": "plan_e_80gb",
+    "name": "80 گیگ / 30 روز (اکونومی)",
+    "price": "304000",
+    "data_limit_bytes": 85899345920,
+    "duration_days": 30,
+    "tier": "eco",
+    "manual": true
+  },
+  {
+    "id": "plan_e_100gb",
+    "name": "100 گیگ / 30 روز (اکونومی)",
+    "price": "380000",
+    "data_limit_bytes": 107374182400,
+    "duration_days": 30,
+    "tier": "eco",
+    "manual": true
+  },
+  {
+    "id": "plan_e_200gb",
+    "name": "200 گیگ / 30 روز (اکونومی)",
+    "price": "760000",
+    "data_limit_bytes": 214748364800,
+    "duration_days": 30,
+    "tier": "eco",
+    "manual": true
+  },
+  {
+    "id": "plan_u_unlimited",
+    "name": "نامحدود — تا 400 گیگ / 30 روز (2 کاربر)",
+    "price": "800000",
+    "data_limit_bytes": 429496729600,
+    "duration_days": 30,
+    "tier": "unlimited",
+    "manual": true
   }
 ]
