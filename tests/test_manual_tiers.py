@@ -49,8 +49,8 @@ class TierMenusTest(unittest.TestCase):
     def test_unlimited_tier_has_two_user_based_plans(self):
         sums = {p["id"]: (int(p["price"]), p["data_limit_bytes"])
                 for p in settings.PLANS if p.get("tier") == "unlimited"}
-        self.assertEqual(sums.get("plan_u_300gb"), (800000, 300 * 1024**3))
-        self.assertEqual(sums.get("plan_u_400gb"), (900000, 400 * 1024**3))
+        self.assertEqual(sums.get("plan_u_300gb"), (750000, 300 * 1024**3))
+        self.assertEqual(sums.get("plan_u_400gb"), (850000, 400 * 1024**3))
         self.assertNotIn("plan_u_unlimited", sums)  # replaced pair, no stale id
 
     def test_tier_info_marketing_copy(self):
@@ -147,7 +147,7 @@ def _link_message(admin_message_id, text, user_id):
 
 class LinkDeliveryTest(unittest.TestCase):
     def test_receive_manual_link_stores_link_and_dms_buyer(self):
-        order = {"order_id": 503, "telegram_id": 42, "plan_id": "plan_e_25gb",
+        order = {"order_id": 503, "telegram_id": 42, "plan_id": "plan_e_50gb",
                  "status": "approved", "panel_username": None}
         message = _link_message(777, "ایجاد شد 👇 https://sub.example.com/s/abc123", _admin_id())
         bot = SimpleNamespace(send_message=AsyncMock(), edit_message_caption=AsyncMock())
@@ -237,7 +237,7 @@ class RenewalScopeTest(unittest.TestCase):
         shopper = 999002
         try:
             eco = _run(db.create_order(
-                telegram_id=shopper, plan_id="plan_e_10gb",
+                telegram_id=shopper, plan_id="plan_e_50gb",
                 requested_username="caps-shopper", receipt_file_id="t",
                 expire_at=datetime.now() + timedelta(days=30),
             ))
@@ -254,7 +254,7 @@ class RenewalScopeTest(unittest.TestCase):
 
     def test_low_renewable_message_hints_reorder_for_manual_tiers(self):
         import handlers.renewal as renewal
-        manual_order = {"order_id": 1, "plan_id": "plan_e_10gb"}
+        manual_order = {"order_id": 1, "plan_id": "plan_e_50gb"}
         with patch.object(renewal, "_fetch_renewable_subs", AsyncMock(return_value=[])), \
              patch("database.get_active_orders", AsyncMock(return_value=[manual_order])):
             text, kb = _run(renewal._show_renewal_list(999002))
@@ -278,7 +278,7 @@ class ManualLinkDbRoundTripTest(unittest.TestCase):
     def test_manual_link_roundtrip(self):
         oid = _run(db.create_order(
             telegram_id=self.SHOP_TG,
-            plan_id="plan_e_10gb",
+            plan_id="plan_e_50gb",
             requested_username="manuallink-tester",
             receipt_file_id="test-file",
             expire_at=datetime.now() + timedelta(days=30),
