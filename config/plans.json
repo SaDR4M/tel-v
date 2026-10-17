@@ -58,7 +58,7 @@
   {
     "id": "plan_e_50gb",
     "name": "50 گیگ / 30 روز (اکونومی)",
-    "price": "190000",
+    "price": "200000",
     "data_limit_bytes": 53687091200,
     "duration_days": 30,
     "tier": "eco",
@@ -67,7 +67,7 @@
   {
     "id": "plan_e_75gb",
     "name": "75 گیگ / 30 روز (اکونومی)",
-    "price": "305000",
+    "price": "310000",
     "data_limit_bytes": 85899345920,
     "duration_days": 30,
     "tier": "eco",
