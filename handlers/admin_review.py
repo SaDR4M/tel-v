@@ -1,13 +1,14 @@
 from datetime import datetime, timedelta
 
 from aiogram import Router, F, Bot
+from aiogram.exceptions import TelegramBadRequest
 from aiogram.types import CallbackQuery, Message
 from aiogram.filters import BaseFilter
 
 import database as db
 from config import settings
 from panel_api import panel, PanelAPIError
-from utils import make_panel_username
+from utils import make_panel_username, safe_edit_caption
 
 router = Router()
 
@@ -76,7 +77,7 @@ async def cb_admin_approve(callback: CallbackQuery, bot: Bot):
                 duration_days=plan["duration_days"],
             )
         except PanelAPIError as e:
-            await callback.message.edit_caption(
+            await safe_edit_caption(callback.message, 
                 caption=callback.message.caption + f"\n\n⚠️ خطای پنل: {e}"
             )
             await callback.answer("تمدید سرویس ناموفق بود — خطا را در بالا ببینید.", show_alert=True)
@@ -95,7 +96,7 @@ async def cb_admin_approve(callback: CallbackQuery, bot: Bot):
                 f"<code>{sub_url}</code>"
             ),
         )
-        await callback.message.edit_caption(
+        await safe_edit_caption(callback.message, 
             caption=callback.message.caption + f"\n\n تایید شد توسط {callback.from_user.first_name}"
         )
         await callback.answer("تایید شد")
@@ -119,7 +120,7 @@ async def cb_admin_approve(callback: CallbackQuery, bot: Bot):
                     "به‌زودی در همین چت ارسال می‌شود."
                 ),
             )
-            await callback.message.edit_caption(
+            await safe_edit_caption(callback.message, 
                 caption=callback.message.caption
                 + "\n\n✅ تایید شد — پس از ساخت اکانت، لینک اشتراک را به همین پیام ریپلای کنید."
             )
@@ -143,7 +144,7 @@ async def cb_admin_approve(callback: CallbackQuery, bot: Bot):
                 duration_days=plan["duration_days"],
             )
         except PanelAPIError as e:
-            await callback.message.edit_caption(
+            await safe_edit_caption(callback.message, 
                 caption=callback.message.caption + f"\n\n⚠️ خطای پنل: {e}"
             )
             await callback.answer("ایجاد کاربر در پنل ناموفق بود — خطا را در بالا ببینید.", show_alert=True)
@@ -162,7 +163,7 @@ async def cb_admin_approve(callback: CallbackQuery, bot: Bot):
                 f"برای راهنمای اتصال، /start → 📖 راهنمای استفاده را بزنید."
             ),
         )
-        await callback.message.edit_caption(
+        await safe_edit_caption(callback.message, 
             caption=callback.message.caption + f"\n\n تایید شد توسط {callback.from_user.first_name}"
         )
         await callback.answer("تایید شد")
@@ -187,7 +188,7 @@ async def cb_admin_reject(callback: CallbackQuery, bot: Bot):
         text="❌ رسید پرداخت شما تایید نشد. اگر فکر می‌کنید اشتباهی رخ داده، با پشتیبانی تماس بگیرید.",
     )
 
-    await callback.message.edit_caption(
+    await safe_edit_caption(callback.message, 
         caption=callback.message.caption + f"\n\n❌ رد شد توسط {callback.from_user.first_name}"
     )
     await callback.answer("رد شد.")
@@ -234,11 +235,15 @@ async def receive_manual_link(message: Message, bot: Bot):
 
     caption = message.reply_to_message.caption or ""
     if "لینک ارسال شد" not in caption:
-        await bot.edit_message_caption(
-            chat_id=message.chat.id,
-            message_id=message.reply_to_message.message_id,
-            caption=caption + "\n\n🔗 لینک ارسال شد.",
-        )
+        try:
+            await bot.edit_message_caption(
+                chat_id=message.chat.id,
+                message_id=message.reply_to_message.message_id,
+                caption=caption + "\n\n🔗 لینک ارسال شد.",
+            )
+        except TelegramBadRequest as e:
+            if "message is not modified" not in str(e).lower():
+                raise
 
     await bot.send_message(
         chat_id=order["telegram_id"],

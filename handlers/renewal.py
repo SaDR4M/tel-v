@@ -104,7 +104,7 @@ async def cb_renew_menu(callback: CallbackQuery):
 async def cb_menu_renew_menu(callback: CallbackQuery):
     text, kb = await _show_renewal_list(callback.from_user.id)
     # await safe_edit_text(callback.message, text, reply_markup=kb)
-    await callback.message.edit_text(text=text, reply_markup=kb)
+    await safe_edit_text(callback.message, text=text, reply_markup=kb)
     await callback.answer()
 
 

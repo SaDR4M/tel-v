@@ -16,7 +16,7 @@ from handlers.keyboards import (
     MENU_BUTTONS,
 )
 from panel_api import panel, PanelAPIError
-from utils import payment_card_line
+from utils import payment_card_line, safe_edit_text
 from datetime import datetime, timedelta
 
 router = Router()
@@ -37,7 +37,7 @@ async def cb_plans(callback: CallbackQuery):
 
 @router.callback_query(F.data == "menu:plans")
 async def menu_plans(callback: CallbackQuery):
-    await callback.message.edit_text(
+    await safe_edit_text(callback.message, 
         "<b>انتخاب دسته‌بندی</b>\n\nنوع اشتراک مورد نظر را انتخاب کنید:",
         reply_markup=tiers_menu(),
     )
@@ -51,7 +51,7 @@ async def tier_plans(callback: CallbackQuery):
         await callback.answer("دسته‌بندی یافت نشد.", show_alert=True)
         return
     header = TIER_INFO.get(tier) or "<b>انتخاب دسته‌بندی</b>\n\nنوع اشتراک مورد نظر را انتخاب کنید:"
-    await callback.message.edit_text(
+    await safe_edit_text(callback.message, 
         f"{header}\n\nیک پلن را انتخاب کنید:",
         reply_markup=plans_menu(tier),
     )
@@ -76,7 +76,7 @@ async def cb_buy(callback: CallbackQuery, state: FSMContext):
     # Fresh offer screen: drop any coupon applied to a previous plan.
     await state.clear()
     await state.update_data(plan_id=plan_id)
-    await callback.message.edit_text(
+    await safe_edit_text(callback.message, 
         _offer_text(plan), reply_markup=confirm_purchase(plan_id)
     )
     await callback.answer()
@@ -118,7 +118,7 @@ async def cb_coupon_ask(callback: CallbackQuery, state: FSMContext):
 
     await state.update_data(plan_id=plan_id)
     await state.set_state(PurchaseFlow.waiting_for_coupon)
-    await callback.message.edit_text(
+    await safe_edit_text(callback.message, 
         "🎟 کد تخفیف را ارسال کنید:",
         reply_markup=back_home(),
     )
@@ -168,7 +168,7 @@ async def cb_coupon_remove(callback: CallbackQuery, state: FSMContext):
 
     await state.update_data(plan_id=plan_id, coupon_code=None)
     await state.set_state(None)
-    await callback.message.edit_text(
+    await safe_edit_text(callback.message, 
         _offer_text(plan), reply_markup=confirm_purchase(plan_id)
     )
     await callback.answer("تخفیف حذف شد.")
@@ -179,7 +179,7 @@ async def cb_payflow(callback: CallbackQuery, state: FSMContext):
     plan_id = callback.data.split(":", 1)[1]
     await state.update_data(plan_id=plan_id)
     await state.set_state(PurchaseFlow.waiting_for_username)
-    await callback.message.edit_text(
+    await safe_edit_text(callback.message, 
         "✏️ یک نام کاربری برای اشتراک خود انتخاب کنید (فقط حروف انگلیسی و عدد، بدون فاصله).\n\n",
         reply_markup=back_home(),
     )

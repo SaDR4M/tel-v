@@ -61,3 +61,13 @@ async def safe_edit_text(message, text, reply_markup=None):
     except TelegramBadRequest as e:
         if "message is not modified" not in str(e).lower():
             raise
+
+
+async def safe_edit_caption(message, caption, reply_markup=None):
+    """Caption counterpart of safe_edit_text — same double-tap race on order
+    review messages (approve/reject/edit by two admins or a retried tap)."""
+    try:
+        await message.edit_caption(caption=caption, reply_markup=reply_markup)
+    except TelegramBadRequest as e:
+        if "message is not modified" not in str(e).lower():
+            raise

@@ -1,3 +1,5 @@
+from utils import safe_edit_text
+
 import logging
 from aiogram import Router, F
 from aiogram.types import CallbackQuery
@@ -73,7 +75,7 @@ async def cb_apply_menu_test(callback: CallbackQuery):
     # One test per Telegram account, ever.
     already_used = await db.has_used_plan(callback.from_user.id, TEST_PLAN_ID)
     if already_used:
-        await callback.message.edit_text(
+        await safe_edit_text(callback.message, 
             "شما قبلاً از اشتراک تست رایگان استفاده کرده‌اید. "
             "هر کاربر فقط یک‌بار می‌تواند از این امکان استفاده کند.",
             show_alert=True,
@@ -102,7 +104,7 @@ async def cb_apply_menu_test(callback: CallbackQuery):
     except PanelAPIError as e:
         # Log-only detail; the user just sees a friendly alert.
         logger.error("Panel error while creating test-plan user: %s", e)
-        await callback.message.edit_text(
+        await safe_edit_text(callback.message, 
             "مشکلی پیش آمد، لطفاً با پشتیبانی تماس بگیرید.", show_alert=True
         )
         await callback.answer()
@@ -121,6 +123,6 @@ async def cb_apply_menu_test(callback: CallbackQuery):
 
     # reply_markup=None removes the menu buttons entirely, so the chat
     # just shows this plain result — this is the "exit the menu" behavior.
-    await callback.message.edit_text(text=result_text, reply_markup=None)
+    await safe_edit_text(callback.message, text=result_text, reply_markup=None)
     await callback.answer()
 

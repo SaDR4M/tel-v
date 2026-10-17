@@ -1,3 +1,5 @@
+from utils import safe_edit_text
+
 import logging
 
 from aiogram import Router, F, Bot
@@ -66,14 +68,14 @@ class SupportFlow(StatesGroup):
 
 @router.message(F.text == "آموزش استفاده")
 async def cb_docs(callback: CallbackQuery):
-    # await callback.message.edit_text(DOCS_TEXT, reply_markup=back_home())
+    # await safe_edit_text(callback.message, DOCS_TEXT, reply_markup=back_home())
     await callback.answer(DOCS_TEXT, reply_markup=back_home())
 
 
 @router.callback_query(F.data == "menu:docs")
 async def cb_menu_docs(callback: CallbackQuery):
-    # await callback.message.edit_text(DOCS_TEXT, reply_markup=back_home())
-    await callback.message.edit_text(text=DOCS_TEXT, reply_markup=back_home())
+    # await safe_edit_text(callback.message, DOCS_TEXT, reply_markup=back_home())
+    await safe_edit_text(callback.message, text=DOCS_TEXT, reply_markup=back_home())
     await callback.answer()
 
 
@@ -99,7 +101,7 @@ async def cb_support(callback: CallbackQuery, state: FSMContext):
 @router.callback_query(F.data == "menu:support")
 async def cb_menu_support(callback: CallbackQuery, state: FSMContext):
     text = await _prompt_support(state)
-    await callback.message.edit_text(text=text, reply_markup=back_home())
+    await safe_edit_text(callback.message, text=text, reply_markup=back_home())
     await callback.answer()
 
 

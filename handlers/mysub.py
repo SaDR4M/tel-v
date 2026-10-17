@@ -7,7 +7,7 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 import database as db
 from config import settings
 from panel_api import panel, PanelAPIError
-from utils import dedupe_labels
+from utils import dedupe_labels, safe_edit_text
 from handlers.keyboards import back_home, main_menu, tiers_menu
 
 router = Router()
@@ -163,7 +163,7 @@ async def order_callback(callback: CallbackQuery):
         order_id=order["order_id"]
     )
 
-    await callback.message.edit_text(
+    await safe_edit_text(callback.message, 
         text,
         parse_mode="HTML",
     )
@@ -200,7 +200,7 @@ async def mysub_menu_callback(callback: CallbackQuery):
     )
 
     if not orders:
-        await callback.message.edit_text(
+        await safe_edit_text(callback.message, 
             text="""
             شما هنوز اشتراک فعالی ندارید
             """,
@@ -210,7 +210,7 @@ async def mysub_menu_callback(callback: CallbackQuery):
         return
 
     names = await db.get_display_names(callback.from_user.id)
-    await callback.message.edit_text(
+    await safe_edit_text(callback.message, 
         text="📦 اشتراک‌های فعال شما:",
         reply_markup=build_orders_keyboard(orders, names),
     )

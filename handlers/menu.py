@@ -1,3 +1,5 @@
+from utils import safe_edit_text
+
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery
 from aiogram.filters import CommandStart
@@ -21,5 +23,5 @@ async def cmd_start(message: Message):
 
 @router.callback_query(F.data == "menu:home")
 async def cb_home(callback: CallbackQuery):
-    await callback.message.edit_text(WELCOME_TEXT, reply_markup=main_menu())
+    await safe_edit_text(callback.message, WELCOME_TEXT, reply_markup=main_menu())
     await callback.answer()
