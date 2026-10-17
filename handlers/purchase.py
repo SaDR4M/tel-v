@@ -6,8 +6,15 @@ from aiogram.fsm.state import State, StatesGroup
 
 import database as db
 from config import settings
-import keyboards
-from handlers.keyboards import tiers_menu, plans_menu, confirm_purchase, admin_review_keyboard, back_home, MENU_BUTTONS
+from handlers.keyboards import (
+    TIER_INFO,
+    tiers_menu,
+    plans_menu,
+    confirm_purchase,
+    admin_review_keyboard,
+    back_home,
+    MENU_BUTTONS,
+)
 from panel_api import panel, PanelAPIError
 from datetime import datetime, timedelta
 
@@ -42,7 +49,7 @@ async def tier_plans(callback: CallbackQuery):
     if not plan_count:
         await callback.answer("دسته‌بندی یافت نشد.", show_alert=True)
         return
-    header = keyboards.TIER_INFO.get(tier) or "🛒 <b>انتخاب دسته‌بندی</b>\n\nنوع اشتراک مورد نظر را انتخاب کنید:"
+    header = TIER_INFO.get(tier) or "🛒 <b>انتخاب دسته‌بندی</b>\n\nنوع اشتراک مورد نظر را انتخاب کنید:"
     await callback.message.edit_text(
         f"{header}\n\n👇 یک پلن را انتخاب کنید:",
         reply_markup=plans_menu(tier),
