@@ -26,6 +26,7 @@ def _is_admin(user_id: int) -> bool:
 
 def _admin_menu():
     b = InlineKeyboardBuilder()
+    b.button(text="📋 داشبورد سفارش‌ها", callback_data="admin:orders:0")
     b.button(text="💰 گزارش فروش کل", callback_data="admin:total")
     b.button(text="📅 روند فروش اخیر", callback_data="admin:trend")
     b.button(text="📊 فروش به تفکیک پلن", callback_data="admin:plans")
@@ -272,6 +273,89 @@ def _panel_report(allocation, system, overview, panel_users, tracked_names) -> s
     return "\n".join(lines)
 
 
+# ---------------------------------------------------------------------------
+# Orders dashboard: paginated, newest first, every field an admin needs.
+# ---------------------------------------------------------------------------
+ORDERS_PER_PAGE = 5
+
+_STATUS_FA = {
+    "pending": "در انتظار بررسی",
+    "approved": "تاییدشده",
+    "rejected": "ردشده",
+    "active": "فعال",
+    "limited": "محدود (اتمام حجم)",
+    "expired": "منقضی",
+    "disabled": "غیرفعال",
+    "on_hold": "نگهداری",
+}
+_TYPE_FA = {"purchase": "خرید", "renewal": "تمدید"}
+
+
+def _status_key(value) -> str:
+    return getattr(value, "value", value)
+
+
+def _fmt_dt(value) -> str:
+    return value.strftime("%Y/%m/%d %H:%M") if value else "—"
+
+
+def _order_block(r: dict) -> str:
+    plan = settings.get_plan(r.get("plan_id") or "")
+    plan_name = plan["name"] if plan else (r.get("plan_id") or "—")
+    price = r.get("final_price")
+    if price is not None:
+        price_txt = f"{int(price):,} {settings.CURRENCY}"
+        if plan and int(price) != int(plan["price"]):
+            price_txt += f" (از {int(plan['price']):,})"
+    elif plan:
+        price_txt = f"{int(plan['price']):,} {settings.CURRENCY}"
+    else:
+        price_txt = "—"
+
+    who = f"@{r['telegram_username']}" if r.get("telegram_username") else "بدون‌یوزرنیم"
+    lines = [
+        f"<b>#{r['order_id']}</b> · {_fmt_dt(r.get('created_at'))}",
+        f"👤 {who} · <code>{r['telegram_id']}</code>",
+        f"📦 {plan_name} — {price_txt}",
+        f"🧾 {_TYPE_FA.get(r.get('order_type'), r.get('order_type'))}"
+        f" · {_STATUS_FA.get(_status_key(r.get('status')), _status_key(r.get('status')))}",
+    ]
+    if r.get("requested_username"):
+        lines.append(f"✍️ نام انتخابی: {r['requested_username']}")
+    if r.get("panel_username"):
+        lines.append(f"🔑 حساب پنل: <code>{r['panel_username']}</code>")
+    elif r.get("target_panel_username"):
+        lines.append(f"🔁 تمدید حساب: <code>{r['target_panel_username']}</code>")
+    elif r.get("manual_link"):
+        lines.append("🌐 لینک دستی ثبت شده")
+    if r.get("coupon_code"):
+        lines.append(f"🎟 کد تخفیف: {r['coupon_code']}")
+    lines.append(f"📅 انقضا: {_fmt_dt(r.get('expire_at'))}")
+    return "\n".join(lines)
+
+
+def _orders_text(rows: list[dict], page: int, pages: int) -> str:
+    header = (
+        f"📋 <b>داشبورد سفارش‌ها</b>\n"
+        f"صفحه <b>{page + 1}</b> از <b>{pages}</b>"
+    )
+    if not rows:
+        return header + "\n\nسفارشی ثبت نشده است."
+    body = "\n\n".join(_order_block(r) for r in rows)
+    return f"{header}\n\n{body}"
+
+
+def _orders_menu(page: int, pages: int):
+    b = InlineKeyboardBuilder()
+    if page > 0:
+        b.button(text="◀️ جدیدتر", callback_data=f"admin:orders:{page - 1}")
+    if page + 1 < pages:
+        b.button(text="قدیمی‌تر ▶️", callback_data=f"admin:orders:{page + 1}")
+    b.button(text="🔙 بازگشت به پنل", callback_data="admin:home")
+    b.adjust(2, 1)
+    return b.as_markup()
+
+
 @router.message(Command("admin"))
 async def cb_admin(message: Message):
     if not _is_admin(message.from_user.id):
@@ -355,6 +439,30 @@ async def cb_admin_buyers(callback: CallbackQuery):
     )
     for chunk in chunks[1:]:
         await callback.message.answer(chunk)
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("admin:orders:"))
+async def cb_admin_orders(callback: CallbackQuery):
+    if not _is_admin(callback.from_user.id):
+        await callback.answer()
+        return
+    try:
+        page = int(callback.data.split(":", 2)[2])
+    except (ValueError, IndexError):
+        page = 0
+
+    total = await db.count_orders()
+    pages = max((total + ORDERS_PER_PAGE - 1) // ORDERS_PER_PAGE, 1)
+    page = min(max(page, 0), pages - 1)
+    rows = await db.get_orders_page(
+        offset=page * ORDERS_PER_PAGE, limit=ORDERS_PER_PAGE
+    )
+    await safe_edit_text(
+        callback.message,
+        _orders_text(rows, page, pages),
+        reply_markup=_orders_menu(page, pages),
+    )
     await callback.answer()
 
 

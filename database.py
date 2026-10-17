@@ -1,4 +1,4 @@
-from sqlalchemy import select, update, delete, bindparam
+from sqlalchemy import select, update, delete, func, bindparam
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 
 from config import settings
@@ -328,6 +328,42 @@ async def get_all_orders_for_admin() -> list[dict]:
             }
             for order_id, telegram_id, telegram_username, plan_id, status, order_type, coupon_code, final_price, created_at in result.all()
         ]
+
+
+async def count_orders() -> int:
+    async with SessionLocal() as session:
+        result = await session.execute(select(func.count()).select_from(Order))
+        return int(result.scalar_one())
+
+
+async def get_orders_page(offset: int, limit: int) -> list[dict]:
+    """One newest-first page of every order (any status) with the fields the
+    admin dashboard renders: buyer identity, plan pricing/coupon, chosen name,
+    delivery (panel account or manual link) and lifecycle dates."""
+    async with SessionLocal() as session:
+        result = await session.execute(
+            select(
+                Order.order_id,
+                Order.telegram_id,
+                User.telegram_username,
+                Order.plan_id,
+                Order.requested_username,
+                Order.order_type,
+                Order.status,
+                Order.panel_username,
+                Order.target_panel_username,
+                Order.manual_link,
+                Order.coupon_code,
+                Order.final_price,
+                Order.created_at,
+                Order.expire_at,
+            )
+            .outerjoin(User, User.telegram_id == Order.telegram_id)
+            .order_by(Order.order_id.desc())
+            .offset(offset)
+            .limit(limit)
+        )
+        return [dict(row._mapping) for row in result.all()]
 
 
 # async def get_provisioned_orders() -> list[tuple[int, str, OrderStatus]]:
