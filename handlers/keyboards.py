@@ -66,24 +66,45 @@ def tiers_menu() -> InlineKeyboardMarkup:
     b = InlineKeyboardBuilder()
     b.button(text="✨ VIP — کیفیت بالا", callback_data="tierplans:vip")
     b.button(text="🪙 اکونومی — اتصال مستقیم", callback_data="tierplans:eco")
-    b.button(text="♾️ نامحدود — تا 400 گیگ", callback_data="tierplans:unlimited")
+    b.button(text="♾️ نامحدود", callback_data="tierplans:unlimited")
     b.button(text="⬅️ بازگشت", callback_data="menu:home")
     b.adjust(1)
     return b.as_markup()
 
 
+# Marketing copy shown above each tier's plan list. The manual-delivery
+# mechanics of eco/unlimited stay invisible to buyers.
+TIER_INFO = {
+    "vip": (
+        "✨ <b>VIP — سریع و پایدار</b>\n\n"
+        "بهترین کیفیت و سرعت لیست ما — مناسب گیمینگ، هوش مصنوعی و مصرف سنگین."
+    ),
+    "eco": (
+        "🪙 <b>اکونومی — اقتصادی</b>\n\n"
+        "اتصال مستقیم با کیفیت معمولی — مناسب وب‌گردی، چت و کارهای روزمره.\n"
+        "برای بازی و هوش مصنوعی، پلن‌های VIP کیفیت بهتری دارند."
+    ),
+    "unlimited": (
+        "♾️ <b>نامحدود</b>\n\n"
+        "• نامحدود: 2 کاربر — سقف حجمی 300 گیگ\n"
+        "• نامحدود ویژه: 3 کاربر — سقف حجمی 400 گیگ\n\n"
+        "⚠️ تضمین کیفیت فقط برای همان تعداد کاربر اعلام‌شده است؛ "
+        "در صورت استفاده‌ی بیشتر، افت کیفیت و سرعت را شاهد خواهید بود."
+    ),
+}
+
+
 def plans_menu(tier: str) -> InlineKeyboardMarkup:
-    """Plan list for one tier. `manual` tiers are provisioned by the admin
-    and get their link delivered by reply to the order — flagged in the UI."""
+    """Plan list for one tier. `manual` tiers are provisioned by the admin —
+    that detail never reaches the user interface."""
     b = InlineKeyboardBuilder()
     for plan in settings.PLANS:
         if plan.get("tier", "vip") != tier:
             continue
-        if plan.get("manual"):
-            label = f"{plan['name']} — {plan['price']} {settings.CURRENCY} (لینک دستی)"
-        else:
-            label = f"{plan['name']} — {plan['price']} {settings.CURRENCY}"
-        b.button(text=label, callback_data=f"buy:{plan['id']}")
+        b.button(
+            text=f"{plan['name']} — {plan['price']} {settings.CURRENCY}",
+            callback_data=f"buy:{plan['id']}",
+        )
     b.button(text="⬅️ بازگشت", callback_data="menu:plans")
     b.adjust(1)
     return b.as_markup()

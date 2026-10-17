@@ -33,7 +33,7 @@ class TierMenusTest(unittest.TestCase):
             self.assertIn(f"tierplans:{tier}", cbs)
         self.assertIn("menu:home", cbs)
 
-    def test_plans_menu_is_tier_scoped_and_flags_manual(self):
+    def test_plans_menu_is_tier_scoped_without_manual_hints(self):
         for tier in ("vip", "eco", "unlimited"):
             kb = keyboards.plans_menu(tier)
             buys = [b for row in kb.inline_keyboard for b in row
@@ -42,11 +42,29 @@ class TierMenusTest(unittest.TestCase):
             for b in buys:
                 plan = settings.get_plan(b.callback_data.split(":", 1)[1])
                 self.assertEqual(plan.get("tier", "vip"), tier)
-        # Manual tiers are labelled so the buyer knows the link comes later.
-        eco_kb = keyboards.plans_menu("eco")
-        self.assertTrue(any("لینک دستی" in b.text for row in eco_kb.inline_keyboard for b in row))
-        vip_kb = keyboards.plans_menu("vip")
-        self.assertFalse(any("لینک دستی" in b.text for row in vip_kb.inline_keyboard for b in row))
+            # Internal delivery mechanics must never surface to buyers.
+            self.assertFalse(
+                any("دستی" in b.text for row in kb.inline_keyboard for b in row))
+
+    def test_unlimited_tier_has_two_user_based_plans(self):
+        sums = {p["id"]: (int(p["price"]), p["data_limit_bytes"])
+                for p in settings.PLANS if p.get("tier") == "unlimited"}
+        self.assertEqual(sums.get("plan_u_300gb"), (800000, 300 * 1024**3))
+        self.assertEqual(sums.get("plan_u_400gb"), (900000, 400 * 1024**3))
+        self.assertNotIn("plan_u_unlimited", sums)  # replaced pair, no stale id
+
+    def test_tier_info_marketing_copy(self):
+        # Every offered tier has an info text, and the unlimited one spells
+        # out both user counts and the overuse quality warning.
+        tiers_present = {p.get("tier", "vip") for p in settings.PLANS}
+        for tier in tiers_present:
+            self.assertIn(tier, keyboards.TIER_INFO)
+        info = keyboards.TIER_INFO["unlimited"]
+        self.assertIn("2 کاربر", info)
+        self.assertIn("3 کاربر", info)
+        self.assertIn("300 گیگ", info)
+        self.assertIn("400 گیگ", info)
+        self.assertIn("افت کیفیت", info)
 
     def test_renewal_plans_menu_vip_only(self):
         kb = keyboards.renewal_plans_menu()
@@ -75,7 +93,7 @@ class ManualApproveTest(unittest.TestCase):
         _run(db.init_db())
 
     def test_manual_approve_skips_panel_and_asks_for_link(self):
-        plan = settings.get_plan("plan_u_unlimited")
+        plan = settings.get_plan("plan_u_300gb")
         order = {"order_id": 501, "telegram_id": 42, "plan_id": plan["id"],
                  "status": "pending", "order_type": "purchase"}
         callback = _approve_callback(501)
