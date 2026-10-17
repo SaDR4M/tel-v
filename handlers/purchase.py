@@ -82,7 +82,11 @@ async def cb_buy(callback: CallbackQuery, state: FSMContext):
 
 
 def _offer_text(plan: dict, coupon_code: str | None = None) -> str:
-    data_str = 0 if plan["data_limit_bytes"] == 0 else f"{plan['data_limit_bytes'] / 1_073_741_824:.0f} گیگابایت"
+    data_str = (
+        "نامحدود"
+        if plan["data_limit_bytes"] == 0
+        else f"{plan['data_limit_bytes'] / 1_073_741_824:.0f} گیگابایت"
+    )
     price_line = f"قیمت: <b>{plan['price']} {settings.CURRENCY}</b>"
     if coupon_code:
         coupon = settings.get_coupon(coupon_code)
@@ -93,14 +97,14 @@ def _offer_text(plan: dict, coupon_code: str | None = None) -> str:
                 f"🎟 تخفیف «{coupon_code}» اعمال شد"
             )
     return (
-        f"🧾 <b>{plan['name']}</b>\n\n"
+        f"<b>{plan['name']}</b>\n\n"
         f"{price_line}\n"
         f"حجم: {data_str}\n"
         f"مدت: {plan['duration_days']} روز\n\n"
-        f"مبلغ را به مشخصات زیر واریز کنید:\n\n"
-        f"💳 : <b>6219 8610 8648 5009</b>\n"
-        f"👤 : <b>صدرا آقاجانلو</b>\n\n"
-        f"پس از واریز، رسید پرداخت را ارسال کنید."
+        "برای تکمیل خرید، مبلغ را به این کارت واریز کنید:\n\n"
+        "کارت: <b>6219 8610 8648 5009</b>\n"
+        "به نام: <b>صدرا آقاجانلو</b>\n\n"
+        "بعد از پرداخت، اسکرین‌شات رسید را همین‌جا بفرستید."
     )
 
 
