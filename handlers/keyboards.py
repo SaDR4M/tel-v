@@ -64,9 +64,9 @@ def tiers_menu() -> InlineKeyboardMarkup:
     """Category menu: VIP (auto-provisioned), Eco and Unlimited (created
     manually by the admin, link delivered as a reply to the order)."""
     b = InlineKeyboardBuilder()
-    b.button(text="✨ VIP — کیفیت بالا", callback_data="tierplans:vip")
-    b.button(text="🪙 اکونومی — اتصال مستقیم", callback_data="tierplans:eco")
-    b.button(text="♾️ نامحدود", callback_data="tierplans:unlimited")
+    b.button(text="حرفه‌ای — باکیفیت و پرسرعت", callback_data="tierplans:vip")
+    b.button(text="اکونومی — کم‌خرج", callback_data="tierplans:eco")
+    b.button(text="نامحدود", callback_data="tierplans:unlimited")
     b.button(text="⬅️ بازگشت", callback_data="menu:home")
     b.adjust(1)
     return b.as_markup()
@@ -74,25 +74,27 @@ def tiers_menu() -> InlineKeyboardMarkup:
 
 # Marketing copy shown above each tier's plan list. The manual-delivery
 # mechanics of eco/unlimited stay invisible to buyers.
+# Marketing copy shown above each tier's plan list. The manual-delivery
+# mechanics of eco/unlimited stay invisible to buyers.
 TIER_INFO = {
     "vip": (
-        "✨ <b>VIP — سریع و پایدار</b>\n\n"
+        "حرفه‌ای — سریع و پایدار\n\n"
         "گیم بدون لگ، کار با هوش مصنوعی بدون ریست مدام، تماشا و دانلود بدون انتظار.\n"
         "سرورهای باکیفیت حتی در شلوغ‌ترین ساعت‌ها سرویس شما را رها نمی‌کنند.\n\n"
-        "💎 اگر پایداری و سرعت برایتان مهم است، این پلن خودش را می‌چسباند."
+        "اگر پایداری و سرعت برایتان مهم است، این پلن خودش را می‌چسباند."
     ),
     "eco": (
-        "🪙 <b>اکونومی — کم‌خرج، تمام‌کار</b>\n\n"
+        "اکونومی — کم‌خرج، تمام‌کار\n\n"
         "وب‌گردی، تلگرام، اینستاگرام و چت‌های روزانه؛ هر روز، با کمترین هزینه.\n"
         "با شفاف‌ترین قیمت هر گیگ، همه‌ی کارهای عادی حساب‌شده پیش می‌رود.\n\n"
-        "💡 برای گیم و هوش مصنوعی که سرعت برایشان حیاتی است، سری به بخش VIP بزنید."
+        "برای گیم و هوش مصنوعی که سرعت برایشان حیاتی است، سری به پلن حرفه‌ای بزنید."
     ),
     "unlimited": (
-        "♾️ <b>نامحدود — یک اشتراک برای همه</b>\n\n"
+        "نامحدود — یک اشتراک برای همه\n\n"
         "یک اشتراک بگیرید، خانواده را هم بیاورید:\n"
         "• نامحدود: همزمان تا 2 کاربر — سقف حجمی 300 گیگ\n"
         "• نامحدود ویژه: همزمان تا 3 کاربر — سقف حجمی 400 گیگ\n\n"
-        "⚠️ کیفیت تضمین‌شده فقط تا همان تعداد کاربر اعلام‌شده است؛ "
+        "کیفیت تضمین‌شده فقط تا همان تعداد کاربر اعلام‌شده است؛ "
         "کاربرِ همزمان بیشتر یعنی افت کیفیت و سرعت برای همه."
     ),
 }

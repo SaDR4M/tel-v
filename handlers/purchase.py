@@ -30,14 +30,14 @@ class PurchaseFlow(StatesGroup):
 @router.message(F.text == "خرید اشتراک جدید")
 async def cb_plans(callback: CallbackQuery):
     await callback.answer(
-        "🛒 <b>انتخاب دسته‌بندی</b>\n\nنوع اشتراک مورد نظر را انتخاب کنید:",
+        "<b>انتخاب دسته‌بندی</b>\n\nنوع اشتراک مورد نظر را انتخاب کنید:",
         reply_markup=tiers_menu(),
     )
 
 @router.callback_query(F.data == "menu:plans")
 async def menu_plans(callback: CallbackQuery):
     await callback.message.edit_text(
-        "🛒 <b>انتخاب دسته‌بندی</b>\n\nنوع اشتراک مورد نظر را انتخاب کنید:",
+        "<b>انتخاب دسته‌بندی</b>\n\nنوع اشتراک مورد نظر را انتخاب کنید:",
         reply_markup=tiers_menu(),
     )
     await callback.answer()
@@ -49,9 +49,9 @@ async def tier_plans(callback: CallbackQuery):
     if not plan_count:
         await callback.answer("دسته‌بندی یافت نشد.", show_alert=True)
         return
-    header = TIER_INFO.get(tier) or "🛒 <b>انتخاب دسته‌بندی</b>\n\nنوع اشتراک مورد نظر را انتخاب کنید:"
+    header = TIER_INFO.get(tier) or "<b>انتخاب دسته‌بندی</b>\n\nنوع اشتراک مورد نظر را انتخاب کنید:"
     await callback.message.edit_text(
-        f"{header}\n\n👇 یک پلن را انتخاب کنید:",
+        f"{header}\n\nیک پلن را انتخاب کنید:",
         reply_markup=plans_menu(tier),
     )
     await callback.answer()
@@ -59,7 +59,7 @@ async def tier_plans(callback: CallbackQuery):
 @router.message(Command("plans"))
 async def cmd_plans(message: Message):
     await message.answer(
-        "🛒 <b>انتخاب دسته‌بندی</b>\n\nنوع اشتراک مورد نظر را انتخاب کنید:",
+        "<b>انتخاب دسته‌بندی</b>\n\nنوع اشتراک مورد نظر را انتخاب کنید:",
         reply_markup=tiers_menu(),
     )
 
