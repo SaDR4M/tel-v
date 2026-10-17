@@ -20,7 +20,7 @@ PANEL_ADMIN_USERNAME = os.getenv("PANEL_ADMIN_USERNAME", "")
 PANEL_ADMIN_PASSWORD = os.getenv("PANEL_ADMIN_PASSWORD", "")
 
 DB_PATH = BASE_DIR / os.getenv("DB_PATH", "data/bot.db")
-SUPPORT_CONTACT = os.getenv("SUPPORT_CONTACT", "@Sadragjl")
+SUPPORT_CONTACT = os.getenv("SUPPORT_CONTACT", "@rocket04m")
 APP_NAME = os.getenv("APP_NAME", "Dante")
 CURRENCY = os.getenv("CURRENCY", "IRT")
 
