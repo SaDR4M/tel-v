@@ -57,6 +57,47 @@ class SafeEditTest(unittest.TestCase):
             _run(safe_edit_caption(message, "cap"))
 
 
+class HandlerDoubleTapTest(unittest.TestCase):
+    """Reproduces the production crash: a callback tapped twice edits with
+    identical content and Telegram answers 'message is not modified'."""
+
+    def _callback(self, data):
+        return SimpleNamespace(
+            from_user=SimpleNamespace(id=1),
+            data=data,
+            message=SimpleNamespace(
+                edit_text=AsyncMock(
+                    side_effect=_bad_request("Bad Request: message is not modified")
+                )
+            ),
+            answer=AsyncMock(),
+        )
+
+    def test_payflow_double_tap(self):
+        from handlers import purchase
+        state = SimpleNamespace(update_data=AsyncMock(), set_state=AsyncMock())
+        _run(purchase.cb_payflow(self._callback("payflow:plan_1m_10gb"), state))
+
+    def test_menu_and_tier_double_taps(self):
+        from handlers import purchase
+        _run(purchase.menu_plans(self._callback("menu:plans")))
+        _run(purchase.tier_plans(self._callback("tierplans:vip")))
+
+    def test_buy_screen_double_tap(self):
+        from handlers import purchase
+        state = SimpleNamespace(clear=AsyncMock(), update_data=AsyncMock())
+        _run(purchase.cb_buy(self._callback("buy:plan_1m_10gb"), state))
+
+    def test_real_errors_still_propagate_through_handler(self):
+        from handlers import purchase
+        c = self._callback("menu:plans")
+        c.message.edit_text = AsyncMock(
+            side_effect=_bad_request("Bad Request: chat not found")
+        )
+        with self.assertRaises(TelegramBadRequest):
+            _run(purchase.menu_plans(c))
+
+
 class EditSitesTest(unittest.TestCase):
     """Every callback edit in the handlers goes through the safe wrappers."""
 
