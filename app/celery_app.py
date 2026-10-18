@@ -30,7 +30,7 @@ celery_app.conf.update(
         # itself skips orders younger than 15 minutes and never sends twice.
         "unused-test-nudge": {
             "task": "tasks.subs.send_unused_test_nudge",
-            "schedule": crontab(minute="*/1"),
+            "schedule": crontab(minute="*/15"),
         },
     }
 )
