@@ -144,8 +144,6 @@ async def mysub_handler(message: Message):
 
 @router.callback_query(F.data.startswith("order:"))
 async def order_callback(callback: CallbackQuery):
-
-    print(callback.data)
     order_id = int(callback.data.split(":")[1])
 
     order = await db.get_order(
@@ -172,13 +170,13 @@ async def order_callback(callback: CallbackQuery):
 
 
 @router.message(F.text == "سرویس‌های من")
-async def mysub_callback(callback: CallbackQuery):
+async def mysub_callback(message: Message):
     orders = await db.get_active_orders(
-        telegram_id=callback.from_user.id
+        telegram_id=message.from_user.id
     )
 
     if not orders:
-        await callback.answer(
+        await message.answer(
             """
             شما هنوز اشتراک فعالی ندارید
             """,
@@ -186,8 +184,8 @@ async def mysub_callback(callback: CallbackQuery):
         )
         return
 
-    names = await db.get_display_names(callback.from_user.id)
-    await callback.answer(
+    names = await db.get_display_names(message.from_user.id)
+    await message.answer(
         "📦 اشتراک‌های فعال شما:",
         reply_markup=build_orders_keyboard(orders, names),
     )

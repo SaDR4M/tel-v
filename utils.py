@@ -52,22 +52,28 @@ def make_panel_username(raw: str, telegram_id: int) -> str:
     return f"{sanitize_username(raw)}_{telegram_id}"
 
 
-async def safe_edit_text(message, text, reply_markup=None):
+async def safe_edit_text(message, text, reply_markup=None, parse_mode=None):
     """Edits a message's text, silently ignoring Telegram's harmless
     'message is not modified' error (fires when a button is tapped twice
     in a row and the resulting text/markup would be identical)."""
+    kwargs = {"reply_markup": reply_markup}
+    if parse_mode is not None:
+        kwargs["parse_mode"] = parse_mode
     try:
-        await message.edit_text(text, reply_markup=reply_markup)
+        await message.edit_text(text, **kwargs)
     except TelegramBadRequest as e:
         if "message is not modified" not in str(e).lower():
             raise
 
 
-async def safe_edit_caption(message, caption, reply_markup=None):
+async def safe_edit_caption(message, caption, reply_markup=None, parse_mode=None):
     """Caption counterpart of safe_edit_text — same double-tap race on order
     review messages (approve/reject/edit by two admins or a retried tap)."""
+    kwargs = {"reply_markup": reply_markup}
+    if parse_mode is not None:
+        kwargs["parse_mode"] = parse_mode
     try:
-        await message.edit_caption(caption=caption, reply_markup=reply_markup)
+        await message.edit_caption(caption=caption, **kwargs)
     except TelegramBadRequest as e:
         if "message is not modified" not in str(e).lower():
             raise

@@ -29,8 +29,8 @@ class PurchaseFlow(StatesGroup):
 
 
 @router.message(F.text == "خرید اشتراک جدید")
-async def cb_plans(callback: CallbackQuery):
-    await callback.answer(
+async def cb_plans(message: Message):
+    await message.answer(
         "<b>انتخاب دسته‌بندی</b>\n\nنوع اشتراک مورد نظر را انتخاب کنید:",
         reply_markup=tiers_menu(),
     )

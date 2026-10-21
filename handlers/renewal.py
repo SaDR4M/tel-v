@@ -17,11 +17,15 @@ from handlers.keyboards import (
 )
 from utils import dedupe_labels, safe_edit_text, payment_card_line
 from datetime import datetime, timedelta
+import time
 
 router = Router()
 
 NEEDS_RENEWAL_STATUSES = {"expired", "disabled", "limited"}
 USAGE_THRESHOLD = 0.90
+# Match the expiry-reminder window: an active subscription in its last two
+# days is renewable even though the panel still reports it as "active".
+RENEWAL_WINDOW_DAYS = 2
 
 
 class RenewalFlow(StatesGroup):
@@ -36,7 +40,14 @@ def _needs_renewal(user: dict) -> bool:
     data_limit = user.get("data_limit", 0)
     used = user.get("used_traffic", 0)
     if data_limit and data_limit > 0:
-        return (used / data_limit) >= USAGE_THRESHOLD
+        if (used / data_limit) >= USAGE_THRESHOLD:
+            return True
+    expire = user.get("expire")
+    try:
+        if expire and float(expire) - time.time() <= RENEWAL_WINDOW_DAYS * 86400:
+            return True
+    except (TypeError, ValueError):
+        pass
     return False
 
 
@@ -94,10 +105,9 @@ async def _show_renewal_list(telegram_id: int):
 
 
 @router.message(F.text == "تمدید سرویس")
-async def cb_renew_menu(callback: CallbackQuery):
-    text, kb = await _show_renewal_list(callback.from_user.id)
-    # await safe_edit_text(callback.message, text, reply_markup=kb)
-    await callback.answer(text=text, reply_markup=kb)
+async def cb_renew_menu(message: Message):
+    text, kb = await _show_renewal_list(message.from_user.id)
+    await message.answer(text, reply_markup=kb)
 
 
 @router.callback_query(F.data == "menu:renew")

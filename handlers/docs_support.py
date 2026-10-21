@@ -67,9 +67,9 @@ class SupportFlow(StatesGroup):
 
 
 @router.message(F.text == "آموزش استفاده")
-async def cb_docs(callback: CallbackQuery):
+async def cb_docs(message: Message):
     # await safe_edit_text(callback.message, DOCS_TEXT, reply_markup=back_home())
-    await callback.answer(DOCS_TEXT, reply_markup=back_home())
+    await message.answer(DOCS_TEXT, reply_markup=back_home())
 
 
 @router.callback_query(F.data == "menu:docs")
@@ -93,9 +93,9 @@ async def _prompt_support(state: FSMContext) -> str:
 
 
 @router.message(F.text == "پشتیبانی")
-async def cb_support(callback: CallbackQuery, state: FSMContext):
+async def cb_support(message: Message, state: FSMContext):
     text = await _prompt_support(state)
-    await callback.answer(text, reply_markup=back_home())
+    await message.answer(text, reply_markup=back_home())
 
 
 @router.callback_query(F.data == "menu:support")

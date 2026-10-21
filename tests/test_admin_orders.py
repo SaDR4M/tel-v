@@ -23,7 +23,7 @@ class OrderBlockTest(unittest.TestCase):
             "order_id": 12,
             "telegram_id": 1173916658,
             "telegram_username": "sadra",
-            "plan_id": "plan_1m_80gb",
+            "plan_id": "plan_1m_75gb",
             "requested_username": "علی",
             "order_type": "purchase",
             "status": "pending",
@@ -43,7 +43,7 @@ class OrderBlockTest(unittest.TestCase):
         self.assertIn("#12", text)
         self.assertIn("@sadra", text)
         self.assertIn("1173916658", text)
-        plan = settings.get_plan("plan_1m_80gb")
+        plan = settings.get_plan("plan_1m_75gb")
         self.assertIn(plan["name"], text)
         self.assertIn(f"{int(plan['price']):,}", text)  # list price when unpaid
         self.assertIn("خرید", text)
@@ -57,7 +57,7 @@ class OrderBlockTest(unittest.TestCase):
             self._row(coupon_code="FRIENDS", final_price=300000)
         )
         self.assertIn("300,000", text)
-        self.assertIn(f"از {int(settings.get_plan('plan_1m_80gb')['price']):,}", text)
+        self.assertIn(f"از {int(settings.get_plan('plan_1m_75gb')['price']):,}", text)
         self.assertIn("FRIENDS", text)
 
     def test_block_delivery_variants(self):
