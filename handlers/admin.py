@@ -32,7 +32,7 @@ def _admin_menu():
     b.button(text="📊 فروش به تفکیک پلن", callback_data="admin:plans")
     b.button(text="🧭 وضعیت سفارش‌ها", callback_data="admin:funnel")
     b.button(text="👥 فروش به تفکیک خریدار", callback_data="admin:buyers")
-    b.button(text="📡 پنل در مقابل سفارش‌ها", callback_data="admin:panel")
+    b.button(text="📊 وضعیت داده پنل", callback_data="admin:panel")
     b.adjust(1)
     return b.as_markup()
 
@@ -243,11 +243,23 @@ def _panel_report(allocation, system, overview, panel_users, tracked_names) -> s
     lines = [
         "📡 <b>پنل در مقابل سفارش‌ها</b>",
         "",
+        "📊 <b>وضعیت داده پنل</b>",
+        f"▫️ مصرف‌شده: <b>{pkg_used / GB:,.2f} گیگابایت</b>",
+    ]
+    if pkg_limit > 0:
+        used_pct = pkg_used / pkg_limit * 100
+        lines += [
+            f"▫️ سقف داده: <b>{pkg_limit / GB:,.2f} گیگابایت</b>",
+            f"▫️ باقی‌مانده: <b>{pkg_left / GB:,.2f} گیگابایت</b> "
+            f"({used_pct:,.0f}% مصرف)",
+        ]
+    else:
+        lines.append("▫️ سقف داده: <b>نامشخص</b>")
+    lines += [
+        "",
         "<b>پنل:</b>",
         f"▫️ واگذارشده: <b>{p_assigned / GB:,.2f} گیگابایت</b>",
         f"▫️ مصرف‌شده: <b>{p_used / GB:,.2f} گیگابایت</b>",
-        f"▫️ پکیج ارائه‌دهنده: {pkg_left / GB:,.2f} باقی از "
-        f"{pkg_limit / GB:,.2f} گیگابایت (مصرف {pkg_used / GB:,.2f})",
         "",
         "<b>سفارش‌های ربات:</b>",
         f"▫️ واگذارشده: <b>{o_assigned / GB:,.2f} گیگابایت</b> "

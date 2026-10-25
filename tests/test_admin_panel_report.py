@@ -48,10 +48,25 @@ class PanelReportTest(unittest.TestCase):
         # differences: panel − orders = the untracked user
         self.assertIn("واگذاری: <b>60.00 گیگابایت</b> خارج از ربات (1 کاربر)", txt)
         self.assertIn("مصرف: <b>30.00 گیگابایت</b> خارج از ربات", txt)
-        # provider package context
-        self.assertIn("1,100.00 باقی از 2,000.00 گیگابایت", txt)
+        # panel data status: used / limit straight from /api/overview
+        self.assertIn("📊 <b>وضعیت داده پنل</b>", txt)
+        self.assertIn("مصرف‌شده: <b>900.00 گیگابایت</b>", txt)
+        self.assertIn("سقف داده: <b>2,000.00 گیگابایت</b>", txt)
+        self.assertIn("باقی‌مانده: <b>1,100.00 گیگابایت</b> (45% مصرف)", txt)
         # status breakdown
         self.assertIn("43 (28 فعال / 8 محدود / 6 منقضی / 1 غیرفعال)", txt)
+
+    def test_panel_data_status_without_a_known_limit(self):
+        txt = _panel_report(_allocation(0, 0), _system(),
+                            _overview(0, 5 * GiB), [], [])
+        self.assertIn("مصرف‌شده: <b>5.00 گیگابایت</b>", txt)
+        self.assertIn("سقف داده: <b>نامشخص</b>", txt)
+        self.assertNotIn("% مصرف", txt)
+
+    def test_missing_subscription_key_does_not_crash(self):
+        txt = _panel_report(_allocation(0, 0), _system(), {}, [], [])
+        self.assertIn("وضعیت داده پنل", txt)
+        self.assertIn("سقف داده: <b>نامشخص</b>", txt)
 
     def test_orders_side_zero_when_no_tracked_orders(self):
         allocation = _allocation(50 * GiB, 20 * GiB)
