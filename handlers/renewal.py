@@ -252,11 +252,11 @@ async def receive_renewal_receipt(message: Message, state: FSMContext, bot: Bot)
     plan_id = data.get("plan_id")
     target_panel_username = data.get("target_panel_username")
     plan = settings.get_plan(plan_id)
-    expire_at = datetime.now() + timedelta(days=29)
     if not plan or not target_panel_username:
         await message.answer("مشکلی پیش آمد، لطفاً دوباره با /start شروع کنید.")
         await state.clear()
         return
+    expire_at = datetime.now() + timedelta(days=int(plan["duration_days"]))
 
     # Re-resolve the coupon at receipt time (it may have been removed since).
     coupon_code = data.get("coupon_code")
@@ -268,6 +268,7 @@ async def receive_renewal_receipt(message: Message, state: FSMContext, bot: Bot)
     file_id = message.photo[-1].file_id
     order_id = await db.create_order(
         telegram_id=message.from_user.id,
+        telegram_username=message.from_user.username,
         plan_id=plan_id,
         requested_username=target_panel_username,
         receipt_file_id=file_id,

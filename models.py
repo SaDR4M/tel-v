@@ -54,6 +54,8 @@ class Order(Base):
 
     order_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     telegram_id: Mapped[int] = mapped_column(Integer)
+    # Snapshot at order time; None when the buyer has no Telegram username.
+    telegram_username: Mapped[str | None] = mapped_column(String, nullable=True)
     plan_id: Mapped[str] = mapped_column(String)
     requested_username: Mapped[str | None] = mapped_column(String, nullable=True)
     order_type: Mapped[str] = mapped_column(String, default="purchase")  # purchase / renewal
@@ -77,6 +79,11 @@ class Order(Base):
     final_price: Mapped[int | None] = mapped_column(Integer, nullable=True)  # amount actually paid (toman)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     expire_at: Mapped[datetime] = mapped_column(DateTime)
+    # Set when a renewal moves this subscription to a newer order row. The old
+    # row keeps its historical expiry for the dashboard, but must never trigger
+    # expiry/usage reminders again (the panel account it points at was extended
+    # by the renewal, so its own expiry is obsolete).
+    superseded_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
 
 class Support(Base):

@@ -35,7 +35,7 @@
     "id": "plan_1m_75gb",
     "name": "75 گیگابایت / 30 روز",
     "price": "380000",
-    "data_limit_bytes": 85899345920,
+    "data_limit_bytes": 80530636800,
     "duration_days": 30,
     "tier": "vip"
   },
@@ -60,7 +60,7 @@
     "id": "plan_e_75gb",
     "name": "75 گیگ / 30 روز (اکونومی)",
     "price": "295000",
-    "data_limit_bytes": 85899345920,
+    "data_limit_bytes": 80530636800,
     "duration_days": 30,
     "tier": "eco",
     "manual": true

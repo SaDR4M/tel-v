@@ -237,7 +237,16 @@ async def receive_receipt(message: Message, state: FSMContext, bot: Bot):
         coupon_code = None
 
     file_id = message.photo[-1].file_id
-    order_id = await db.create_order(telegram_id=message.from_user.id, plan_id=plan_id,  requested_username=requested_username, receipt_file_id=file_id, expire_at=expire_at, coupon_code=coupon_code, final_price=final_price)
+    order_id = await db.create_order(
+        telegram_id=message.from_user.id,
+        telegram_username=message.from_user.username,
+        plan_id=plan_id,
+        requested_username=requested_username,
+        receipt_file_id=file_id,
+        expire_at=expire_at,
+        coupon_code=coupon_code,
+        final_price=final_price,
+    )
     await state.clear()
 
     uname = f"@{message.from_user.username}" if message.from_user.username else str(message.from_user.id)

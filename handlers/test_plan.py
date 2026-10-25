@@ -30,6 +30,7 @@ async def cb_apply_test(message: Message):
     requested_username = message.from_user.username or str(message.from_user.id)
     order_id = await db.create_order(
         telegram_id=message.from_user.id,
+        telegram_username=message.from_user.username,
         plan_id=TEST_PLAN_ID,
         expire_at=datetime.now() + timedelta(days=TEST_DURATION_DAYS),
         requested_username=requested_username,
@@ -84,6 +85,7 @@ async def cb_apply_menu_test(callback: CallbackQuery):
     requested_username = callback.from_user.username or str(callback.from_user.id)
     order_id = await db.create_order(
         telegram_id=callback.from_user.id,
+        telegram_username=callback.from_user.username,
         plan_id=TEST_PLAN_ID,
         expire_at=datetime.now() + timedelta(days=TEST_DURATION_DAYS),
         requested_username=requested_username,

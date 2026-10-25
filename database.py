@@ -1,4 +1,5 @@
 from sqlalchemy import select, update, delete, func, bindparam
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 
 from config import settings
@@ -34,12 +35,23 @@ def _ensure_order_columns(conn):
     existing = {
         row[1] for row in conn.exec_driver_sql("PRAGMA table_info(orders)").fetchall()
     }
-    if "coupon_code" not in existing:
-        conn.exec_driver_sql("ALTER TABLE orders ADD COLUMN coupon_code VARCHAR")
-    if "final_price" not in existing:
-        conn.exec_driver_sql("ALTER TABLE orders ADD COLUMN final_price INTEGER")
-    if "manual_link" not in existing:
-        conn.exec_driver_sql("ALTER TABLE orders ADD COLUMN manual_link VARCHAR")
+    additions = {
+        "coupon_code": "ALTER TABLE orders ADD COLUMN coupon_code VARCHAR",
+        "final_price": "ALTER TABLE orders ADD COLUMN final_price INTEGER",
+        "manual_link": "ALTER TABLE orders ADD COLUMN manual_link VARCHAR",
+        "telegram_username": "ALTER TABLE orders ADD COLUMN telegram_username VARCHAR",
+        "superseded_at": "ALTER TABLE orders ADD COLUMN superseded_at DATETIME",
+    }
+    for column, statement in additions.items():
+        if column in existing:
+            continue
+        try:
+            conn.exec_driver_sql(statement)
+        except OperationalError as exc:
+            # The bot and the Celery worker both migrate on startup. If they
+            # race, the loser finds the column already there -- that's success.
+            if "duplicate column" not in str(exc).lower():
+                raise
 
 
 async def upsert_user(telegram_id: int, telegram_username: str | None):
@@ -78,6 +90,7 @@ async def create_order(
     requested_username: str,
     receipt_file_id: str,
     expire_at: datetime,
+    telegram_username: str | None = None,
     order_type: str = "purchase",
     target_panel_username: str | None = None,
     coupon_code: str | None = None,
@@ -86,6 +99,7 @@ async def create_order(
     async with SessionLocal() as session:
         order = Order(
             telegram_id=telegram_id,
+            telegram_username=(telegram_username or "").strip() or None,
             plan_id=plan_id,
             requested_username=requested_username,
             receipt_file_id=receipt_file_id,
@@ -146,6 +160,28 @@ async def set_order_status(order_id: int, status: str, panel_username: str | Non
             await session.commit()
 
 
+async def supersede_orders_for_panel(panel_username: str, keep_order_id: int) -> int:
+    """Mark older orders for the same panel account as superseded by a renewal.
+
+    A renewal reuses the panel username, so the previous order row keeps its old
+    expiry; without this marker the expiry/usage scans would keep reminding the
+    buyer about a subscription that has already been extended. Only the order
+    created by the renewal stays current.
+    """
+    async with SessionLocal() as session:
+        result = await session.execute(
+            update(Order)
+            .where(
+                Order.panel_username == panel_username,
+                Order.order_id != keep_order_id,
+                Order.superseded_at.is_(None),
+            )
+            .values(superseded_at=datetime.now())
+        )
+        await session.commit()
+        return result.rowcount
+
+
 async def set_order_expire_at(order_id: int, expire_at: datetime):
     """Fix up the expire date after approval — create_order stamps a generic
     29-day window, but the approved plan may state a different duration."""
@@ -203,6 +239,9 @@ async def get_active_orders(telegram_id: int) -> list[dict]:
                 Order.telegram_id == telegram_id,
                 Order.status.notin_(UNPROVISIONED_STATUSES),
                 Order.expire_at >= datetime.now(),
+                # A renewal replaces the previous order row for the same panel
+                # account; keep the stale duplicate out of mysub/the renewal menu.
+                Order.superseded_at.is_(None),
             )
             .order_by(Order.created_at.desc())
         )
@@ -243,7 +282,7 @@ async def get_sales_data() -> list[dict]:
         result = await session.execute(
             select(
                 Order.telegram_id,
-                User.telegram_username,
+                func.coalesce(Order.telegram_username, User.telegram_username).label("telegram_username"),
                 Order.plan_id,
                 Order.coupon_code,
                 Order.final_price,
@@ -314,7 +353,7 @@ async def get_all_orders_for_admin() -> list[dict]:
             select(
                 Order.order_id,
                 Order.telegram_id,
-                User.telegram_username,
+                func.coalesce(Order.telegram_username, User.telegram_username).label("telegram_username"),
                 Order.plan_id,
                 Order.status,
                 Order.order_type,
@@ -356,7 +395,7 @@ async def get_orders_page(offset: int, limit: int) -> list[dict]:
             select(
                 Order.order_id,
                 Order.telegram_id,
-                User.telegram_username,
+                func.coalesce(Order.telegram_username, User.telegram_username).label("telegram_username"),
                 Order.plan_id,
                 Order.requested_username,
                 Order.order_type,

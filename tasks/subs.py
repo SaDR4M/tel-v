@@ -115,6 +115,9 @@ async def _scan_subscriptions_expire_date():
                 Order.status.notin_(UNPROVISIONED_STATUSES),
                 # Free test plans never get expiry reminders.
                 Order.plan_id != TEST_PLAN_ID,
+                # A renewal supersedes the previous order for the same panel
+                # account; that row's expiry is stale and must stay silent.
+                Order.superseded_at.is_(None),
                 Order.expire_at > now,
                 Order.expire_at < now + timedelta(days=2)
             )
@@ -268,7 +271,8 @@ async def _fetch_order(panel_username: str):
 
     Renewals reuse the same panel username, so match on it alone and take the
     latest expiry; a date-equality match would both miss and raise
-    MultipleResultsFound.
+    MultipleResultsFound. Superseded rows are skipped so a renewal's reminder
+    is tied to the current order, not the one it replaced.
     """
     async with SessionLocal() as session:
         result = await session.execute(
@@ -278,6 +282,7 @@ async def _fetch_order(panel_username: str):
                 Order.status.notin_(UNPROVISIONED_STATUSES),
                 # Free test plans never get usage reminders.
                 Order.plan_id != TEST_PLAN_ID,
+                Order.superseded_at.is_(None),
             )
             .order_by(Order.expire_at.desc())
             .limit(1)

@@ -1,5 +1,6 @@
 from celery import Celery
 from celery.schedules import crontab
+from celery.signals import worker_init
 
 from config import settings
 
@@ -35,3 +36,19 @@ celery_app.conf.update(
     }
 )
 
+
+
+@worker_init.connect
+def _ensure_schema(**_kwargs):
+    """Apply additive migrations before the worker consumes any task.
+
+    The bot runs init_db() on startup, but the worker can be restarted on its
+    own (and systemd starts it in parallel with the bot). Without this, a task
+    touching a newly added column would fail with "no such column" until the
+    bot happened to restart first.
+    """
+    import asyncio
+
+    import database as db
+
+    asyncio.run(db.init_db())
