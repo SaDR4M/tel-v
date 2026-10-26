@@ -28,6 +28,14 @@ CURRENCY = os.getenv("CURRENCY", "IRT")
 CELERY_BROKER_URL = os.getenv("CELERY_BROKER_URL", "redis://localhost:6379/0")
 CELERY_RESULT_BACKEND = os.getenv("CELERY_RESULT_BACKEND", "redis://localhost:6379/1")
 
+# Read-only web admin dashboard (see dashboard.py). Bind to localhost and put
+# nginx + TLS in front; HTTP Basic credentials are required at startup.
+DASHBOARD_HOST = os.getenv("DASHBOARD_HOST", "127.0.0.1")
+DASHBOARD_PORT = int(os.getenv("DASHBOARD_PORT", "8080"))
+DASHBOARD_USERNAME = os.getenv("DASHBOARD_USERNAME", "")
+DASHBOARD_PASSWORD = os.getenv("DASHBOARD_PASSWORD", "")
+DASHBOARD_LIVE_WINDOW = int(os.getenv("DASHBOARD_LIVE_WINDOW", "60"))
+
 # Make sure the data directory exists
 DB_PATH.parent.mkdir(parents=True, exist_ok=True)
 

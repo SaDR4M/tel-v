@@ -1,0 +1,29 @@
+# Deploy: copy to /etc/systemd/system/vpnbot-dashboard.service, then:
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now vpnbot-dashboard
+#
+# Read-only web admin dashboard (dashboard.py). Set DASHBOARD_USERNAME and
+# DASHBOARD_PASSWORD in .env first -- the process exits without them. It binds
+# to 127.0.0.1:8080; nginx terminates TLS and proxies the subdomain to it.
+# The live events widget needs EVENTS_DATABASE_URL (Postgres); without it the
+# dashboard still works and the widget shows "unavailable".
+
+[Unit]
+Description=Telegram VPN Bot - read-only web dashboard
+After=network.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+WorkingDirectory=/root/Project/Telegram-bot-v2/telegram_vpn_bot/telegram_vpn_bot
+ExecStart=/root/Project/Telegram-bot-v2/telegram_vpn_bot/telegram_vpn_bot/.venv/bin/python dashboard.py
+Restart=always
+RestartSec=5
+Environment=PYTHONUNBUFFERED=1
+StandardOutput=append:/var/log/vpnbot-dashboard.log
+StandardError=append:/var/log/vpnbot-dashboard.log
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target
