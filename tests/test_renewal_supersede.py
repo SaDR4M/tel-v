@@ -89,6 +89,30 @@ class SupersedeHelperTest(unittest.TestCase):
         )
 
 
+class AtomicApprovalTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        _run(db.init_db())
+
+    def tearDown(self):
+        _run(db.delete_test_orders(SHOPPER))
+
+    def test_approval_retires_the_old_order_in_one_call(self):
+        username = _username("atomic")
+        old_id = _old_order(username, timedelta(days=5))
+        new_id = _renewal_order(username, approve=False)
+        expiry = datetime.now() + timedelta(days=30)
+
+        _run(db.approve_renewal_order(new_id, username, expiry))
+
+        old = _run(db.get_order(old_id))
+        new = _run(db.get_order(new_id))
+        self.assertIsNotNone(old["superseded_at"])
+        self.assertEqual(new["status"], "approved")
+        self.assertEqual(new["panel_username"], username)
+        self.assertIsNone(new["superseded_at"])
+
+
 class ReminderScanTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -104,12 +128,24 @@ class ReminderScanTest(unittest.TestCase):
         old_id = _old_order(username, timedelta(days=1, hours=12))
         new_id = _renewal_order(username, expires_in=timedelta(days=1))
 
-        ids = {o.order_id for o in _run(subs._scan_subscriptions_expire_date())}
+        with patch.object(
+            subs, "_active_panel_usernames", AsyncMock(return_value={username})
+        ):
+            ids = {
+                o.order_id
+                for o in _run(subs._scan_subscriptions_expire_date())
+            }
         self.assertIn(old_id, ids)  # would have been reminded before the fix
 
         _run(db.supersede_orders_for_panel(username, keep_order_id=new_id))
 
-        ids = {o.order_id for o in _run(subs._scan_subscriptions_expire_date())}
+        with patch.object(
+            subs, "_active_panel_usernames", AsyncMock(return_value={username})
+        ):
+            ids = {
+                o.order_id
+                for o in _run(subs._scan_subscriptions_expire_date())
+            }
         self.assertNotIn(old_id, ids)
         self.assertIn(new_id, ids)
 

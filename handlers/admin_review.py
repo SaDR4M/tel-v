@@ -84,22 +84,19 @@ async def cb_admin_approve(callback: CallbackQuery, bot: Bot):
             return
 
         await db.link_panel_account(telegram_id, panel_username)
-        await db.set_order_status(order_id, "approved", panel_username)
 
         # Align this order's expiry with the panel's real one (renew_user extends
         # from approval time, not from when the receipt was sent), and retire the
         # previous order row for this panel account so its stale expiry can never
         # trigger another reminder for a subscription that was just extended.
+        # Both writes happen in one transaction so a scan can never see the new
+        # order approved while the old one is still eligible.
         expire_ts = user_obj.get("expire")
         if expire_ts:
-            await db.set_order_expire_at(
-                order_id, datetime.fromtimestamp(float(expire_ts))
-            )
+            expire_at = datetime.fromtimestamp(float(expire_ts))
         else:
-            await db.set_order_expire_at(
-                order_id, datetime.now() + timedelta(days=int(plan["duration_days"]))
-            )
-        await db.supersede_orders_for_panel(panel_username, keep_order_id=order_id)
+            expire_at = datetime.now() + timedelta(days=int(plan["duration_days"]))
+        await db.approve_renewal_order(order_id, panel_username, expire_at)
 
         sub_url = user_obj.get("subscription_url", "نامشخص")
 

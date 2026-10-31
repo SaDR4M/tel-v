@@ -26,6 +26,28 @@ async def init_db():
         await conn.run_sync(_ensure_order_columns)
 
 
+def init_db_sync():
+    """Migrate the DB without the async driver.
+
+    Celery's ``worker_init`` runs in the parent process *before* the prefork
+    pool forks. Using the async engine there starts an aiosqlite thread that
+    does not survive fork, so the pool children hang forever on their first
+    DB query. A short-lived synchronous engine avoids creating any threads.
+    """
+    from sqlalchemy import create_engine
+
+    sync_engine = create_engine(
+        f"sqlite:///{settings.DB_PATH}",
+        connect_args={"timeout": 30},
+    )
+    try:
+        with sync_engine.begin() as conn:
+            Base.metadata.create_all(conn)
+            _ensure_order_columns(conn)
+    finally:
+        sync_engine.dispose()
+
+
 def _ensure_order_columns(conn):
     """Additively patch columns added after the first deploy.
 
@@ -180,6 +202,36 @@ async def supersede_orders_for_panel(panel_username: str, keep_order_id: int) ->
         )
         await session.commit()
         return result.rowcount
+
+
+async def approve_renewal_order(
+    order_id: int,
+    panel_username: str,
+    expire_at: datetime,
+):
+    """Approve a renewal and retire the previous order in one transaction.
+
+    Splitting these writes left a window where the new order was approved but
+    the old order was not yet superseded, so a reminder scan could still
+    message the buyer about the subscription they had just renewed.
+    """
+    async with SessionLocal() as session:
+        async with session.begin():
+            await session.execute(
+                update(Order)
+                .where(
+                    Order.panel_username == panel_username,
+                    Order.order_id != order_id,
+                    Order.superseded_at.is_(None),
+                )
+                .values(superseded_at=datetime.now())
+            )
+            order = await session.get(Order, order_id)
+            if order is None:
+                raise ValueError(f"Order {order_id} not found")
+            order.status = "approved"
+            order.panel_username = panel_username
+            order.expire_at = expire_at
 
 
 async def set_order_expire_at(order_id: int, expire_at: datetime):

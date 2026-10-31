@@ -3,6 +3,7 @@ renewed, the order row it replaced must never produce another reminder; only
 the order created by the renewal may, and only for its own cycle."""
 import asyncio
 import os
+import sqlite3
 import tempfile
 import unittest
 from datetime import datetime, timedelta
@@ -14,7 +15,7 @@ from sqlalchemy import create_engine, select
 import database as db
 import handlers.admin_review as admin_review
 from config import settings
-from database import NotificationLog, SessionLocal
+from database import NotificationLog, Order, SessionLocal
 from models import NotificationKind, NotificationStatus
 from tasks import subs
 
@@ -75,9 +76,21 @@ def _sends_to_shopper(send_mock):
     ]
 
 
+async def _all_panel_usernames():
+    async with SessionLocal() as session:
+        result = await session.execute(
+            select(Order.panel_username).where(Order.panel_username.isnot(None))
+        )
+        return {row[0] for row in result}
+
+
 def _run_expiry_pass():
     """Execute the real Celery task body (no broker/worker needed)."""
-    subs.send_expire_reminder()
+    active = _run(_all_panel_usernames())
+    with patch.object(
+        subs, "_active_panel_usernames", AsyncMock(return_value=active)
+    ):
+        subs.send_expire_reminder()
 
 
 def _approve_renewal(order_id: int, panel_expire_ts: int | None):
@@ -115,9 +128,13 @@ class RenewalNotificationTest(unittest.TestCase):
         panel_expire = int((datetime.now() + timedelta(days=30)).timestamp())
 
         # Negative control: at approval time the old row really is eligible.
-        self.assertIn(
-            old_id, {o.order_id for o in _run(subs._scan_subscriptions_expire_date())}
-        )
+        with patch.object(
+            subs, "_active_panel_usernames", AsyncMock(return_value={username})
+        ):
+            self.assertIn(
+                old_id,
+                {o.order_id for o in _run(subs._scan_subscriptions_expire_date())},
+            )
 
         with patch.object(subs, "_send_telegram_message", AsyncMock()) as send:
             bot = _approve_renewal(renewal_id, panel_expire)
@@ -248,6 +265,179 @@ class RenewalNotificationTest(unittest.TestCase):
         self.assertLess(remaining, expected + timedelta(minutes=5))
         self.assertIsNone(renewed["superseded_at"])
         self.assertIsNotNone(_run(db.get_order(old_id))["superseded_at"])
+
+
+class UsageReminderStatusTest(unittest.TestCase):
+    """Usage warnings must include limited users and the exact 90% boundary."""
+
+    @classmethod
+    def setUpClass(cls):
+        _run(db.init_db())
+
+    def tearDown(self):
+        _run(db.delete_test_orders(SHOPPER))
+
+    def _run_limit_pass(self, panel_users):
+        with patch.object(
+            subs.panel, "get_users_list",
+            AsyncMock(return_value=panel_users),
+        ) as fetch, patch.object(
+            subs, "_send_telegram_message", AsyncMock(),
+        ) as send:
+            subs.send_limit_reminder()
+        return fetch, send
+
+    def test_limited_user_is_not_reminded(self):
+        username = _username("limited")
+        order_id = _order(username, timedelta(days=30))
+        fetch, send = self._run_limit_pass([{
+            "username": username, "status": "limited",
+            "used_traffic": 95, "data_limit": 100,
+        }])
+
+        fetch.assert_awaited_once_with(status="active")
+        self.assertEqual(_sends_to_shopper(send), [])
+        self.assertEqual(
+            [log for log in _logs(order_id)
+             if log.kind == NotificationKind.USAGE_90],
+            [],
+        )
+
+    def test_exactly_ninety_percent_is_reminded(self):
+        username = _username("exact90")
+        _order(username, timedelta(days=30))
+        _, send = self._run_limit_pass([{
+            "username": username, "status": "active",
+            "used_traffic": 90, "data_limit": 100,
+        }])
+        self.assertEqual(len(_sends_to_shopper(send)), 1)
+
+    def test_below_ninety_percent_is_not_reminded(self):
+        username = _username("below90")
+        _order(username, timedelta(days=30))
+        _, send = self._run_limit_pass([{
+            "username": username, "status": "active",
+            "used_traffic": 89.9, "data_limit": 100,
+        }])
+        self.assertEqual(_sends_to_shopper(send), [])
+
+    def test_expired_and_disabled_users_are_skipped(self):
+        names = [_username("expired"), _username("disabled")]
+        for name in names:
+            _order(name, timedelta(days=30))
+        _, send = self._run_limit_pass([
+            {"username": names[0], "status": "expired",
+             "used_traffic": 95, "data_limit": 100},
+            {"username": names[1], "status": "disabled",
+             "used_traffic": 95, "data_limit": 100},
+        ])
+        self.assertEqual(_sends_to_shopper(send), [])
+
+
+async def _get_order_obj(order_id: int):
+    async with SessionLocal() as session:
+        return await session.get(Order, order_id)
+
+
+class ExpiryStatusTest(unittest.TestCase):
+    """Expiry reminders are only for active panel subscriptions."""
+
+    @classmethod
+    def setUpClass(cls):
+        _run(db.init_db())
+
+    def tearDown(self):
+        _run(db.delete_test_orders(SHOPPER))
+
+    def test_limited_order_gets_no_expiry_reminder(self):
+        active_name = _username("expiry-active")
+        limited_name = _username("expiry-limited")
+        active_id = _order(active_name, timedelta(days=1))
+        limited_id = _order(limited_name, timedelta(days=1))
+
+        with patch.object(
+            subs, "_active_panel_usernames",
+            AsyncMock(return_value={active_name}),
+        ):
+            ids = {
+                order.order_id
+                for order in _run(subs._scan_subscriptions_expire_date())
+            }
+
+        self.assertIn(active_id, ids)
+        self.assertNotIn(limited_id, ids)
+
+    def test_claim_is_released_if_order_is_superseded_before_send(self):
+        username = _username("expiry-race")
+        order_id = _order(username, timedelta(days=1))
+        order_obj = _run(_get_order_obj(order_id))
+
+        original_claim = subs._claim_notification
+
+        async def claim_then_supersede(order_id, kind, cycle):
+            claimed = await original_claim(order_id, kind, cycle)
+            await db.supersede_orders_for_panel(username, keep_order_id=999999)
+            return claimed
+
+        with patch.object(
+            subs, "_scan_subscriptions_expire_date",
+            AsyncMock(return_value=[order_obj]),
+        ), patch.object(
+            subs, "_claim_notification", side_effect=claim_then_supersede,
+        ), patch.object(
+            subs, "_send_telegram_message", AsyncMock(),
+        ) as send:
+            subs.send_expire_reminder()
+
+        send.assert_not_awaited()
+        self.assertEqual(_logs(order_id), [])
+
+
+class UsageRaceTest(unittest.TestCase):
+    """A usage claim must be dropped if the order is renewed mid-scan."""
+
+    @classmethod
+    def setUpClass(cls):
+        _run(db.init_db())
+
+    def tearDown(self):
+        _run(db.delete_test_orders(SHOPPER))
+
+    def test_claim_is_released_if_renewal_is_approved_before_send(self):
+        username = _username("usage-race")
+        old_id = _order(username, timedelta(days=30))
+        new_id = _order(
+            username, timedelta(days=60),
+            approve=False, order_type="renewal",
+        )
+        new_expiry = datetime.now() + timedelta(days=60)
+
+        original_claim = subs._claim_notification
+
+        async def claim_then_approve(order_id, kind, cycle):
+            claimed = await original_claim(order_id, kind, cycle)
+            await db.approve_renewal_order(new_id, username, new_expiry)
+            return claimed
+
+        with patch.object(
+            subs, "_scan_subscriptions_limit_usage",
+            AsyncMock(return_value=[{
+                "username": username, "status": "active",
+                "used_traffic": 95, "data_limit": 100,
+            }]),
+        ), patch.object(
+            subs, "_claim_notification", side_effect=claim_then_approve,
+        ), patch.object(
+            subs, "_send_telegram_message", AsyncMock(),
+        ) as send:
+            subs.send_limit_reminder()
+
+        send.assert_not_awaited()
+        self.assertEqual(
+            [log for log in _logs(old_id)
+             if log.kind == NotificationKind.USAGE_90],
+            [],
+        )
 
 
 class SchemaUpgradeTest(unittest.TestCase):

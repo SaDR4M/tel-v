@@ -12,7 +12,7 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 # local
 from database import SessionLocal, Order, NotificationLog, NotificationKind, NotificationStatus
 from models import UNPROVISIONED_STATUSES, PANEL_STATUS_TO_ORDER_STATUS
-from sqlalchemy import select, update, func
+from sqlalchemy import select, update, delete, func
 from sqlalchemy.exc import IntegrityError
 from config import settings
 from panel_api import panel, UserStatus
@@ -72,6 +72,8 @@ async def _order_status_bulk_update(orders: List[Order]):
 @shared_task(
     bind=True,
     max_retries=3,
+    soft_time_limit=120,
+    time_limit=150,
     # autoretry_for((Exception,))
 )
 def sync_order_statuses(*args, **kwargs):
@@ -107,6 +109,21 @@ def sync_order_statuses(*args, **kwargs):
     return len(to_update)
 
 # ------------------------------------------------------
+async def _active_panel_usernames() -> set[str]:
+    """Panel usernames whose subscription is currently active.
+
+    Expiry reminders are limited to active subscriptions. Manual-tier orders
+    have no panel account, so they are handled separately by the caller.
+    """
+    users = await panel.get_users_list(status=UserStatus.ACTIVE.value)
+    return {
+        user["username"]
+        for user in users
+        if user.get("username")
+        and (user.get("status") or "").lower() == UserStatus.ACTIVE.value
+    }
+
+
 async def _scan_subscriptions_expire_date():
     now = datetime.now()
     async with SessionLocal() as session:
@@ -123,7 +140,16 @@ async def _scan_subscriptions_expire_date():
             )
         )
         orders = result.scalars().all()
+
+    if not orders:
         return orders
+
+    active_usernames = await _active_panel_usernames()
+    return [
+        order for order in orders
+        # Manual-tier orders (no panel account) keep their reminder.
+        if not order.panel_username or order.panel_username in active_usernames
+    ]
 
 
 async def _claim_notification(
@@ -176,6 +202,37 @@ async def _mark_notification(
         await session.commit()
 
 
+async def _release_notification(
+    order_id: int,
+    kind: NotificationKind,
+    cycle_expires_at: datetime,
+):
+    """Drop a claim that turned out to be stale (e.g. renewal approved).
+
+    Deleting instead of marking FAILED is deliberate: if the order becomes
+    eligible again later, the same cycle can still be reminded.
+    """
+    async with SessionLocal() as session:
+        await session.execute(
+            delete(NotificationLog).where(
+                NotificationLog.order_id == order_id,
+                NotificationLog.kind == kind,
+                NotificationLog.cycle_expires_at == cycle_expires_at,
+            )
+        )
+        await session.commit()
+
+
+async def _order_is_superseded(order_id: int) -> bool:
+    async with SessionLocal() as session:
+        row = (
+            await session.execute(
+                select(Order.superseded_at).where(Order.order_id == order_id)
+            )
+        ).first()
+        return bool(row and row[0] is not None)
+
+
 async def _send_telegram_message(telegram_id: int, message: str, *args, reply_markup=None, **kwargs):
     bot = Bot(
         token=settings.BOT_TOKEN,
@@ -194,6 +251,8 @@ async def _send_telegram_message(telegram_id: int, message: str, *args, reply_ma
 @shared_task(
     bind=True,
     max_retries=1,
+    soft_time_limit=600,
+    time_limit=660,
     # autoretry_for=(Exception,)
 )
 def scan_subscriptions(*args, **kwargs):
@@ -225,16 +284,33 @@ def _sub_title(order) -> str:
 @shared_task(
     bind=True,
     max_retries=3,
+    soft_time_limit=240,
+    time_limit=300,
     # autoretry_for=(Exception,)
 )
 def send_expire_reminder(*args, **kwargs):
-    orders = asyncio.run(_scan_subscriptions_expire_date())
+    try:
+        orders = asyncio.run(_scan_subscriptions_expire_date())
+    except Exception:
+        logger.exception("Expiry reminder: failed to fetch panel users.")
+        return None
+
     for order in orders:
         cycle_expires_at = order.expire_at
         # Claim before sending so an overlapping beat run can't double-send.
         if not asyncio.run(
             _claim_notification(order.order_id, NotificationKind.EXPIRY_2D, cycle_expires_at)
         ):
+            continue
+
+        # A renewal may have been approved while this pass was reading the
+        # panel. Never send from the order it replaced.
+        if asyncio.run(_order_is_superseded(order.order_id)):
+            asyncio.run(
+                _release_notification(
+                    order.order_id, NotificationKind.EXPIRY_2D, cycle_expires_at
+                )
+            )
             continue
 
         text = (
@@ -291,13 +367,20 @@ async def _fetch_order(panel_username: str):
 
 
 async def _scan_subscriptions_limit_usage():
-    # Call the panel api and fetch all active orders, then check each limit usage.
-    return await panel.get_users_list(status=UserStatus.ACTIVE.value)
+    # Only active accounts get usage warnings. Filter defensively in case the
+    # panel ignores the status parameter.
+    users = await panel.get_users_list(status=UserStatus.ACTIVE.value)
+    return [
+        user for user in users
+        if (user.get("status") or "").lower() == UserStatus.ACTIVE.value
+    ]
 
 
 @shared_task(
     bind=True,
     max_retries=3,
+    soft_time_limit=240,
+    time_limit=300,
     # autoretry_for=(Exception,)
 )
 def send_limit_reminder(*args, **kwargs):
@@ -319,7 +402,7 @@ def send_limit_reminder(*args, **kwargs):
                 continue
 
             used_percentage = (used_traffic / data_limit) * 100
-            if used_percentage <= 90:
+            if used_percentage < 90:
                 continue
 
             order = asyncio.run(_fetch_order(panel_username))
@@ -338,8 +421,19 @@ def send_limit_reminder(*args, **kwargs):
             ):
                 continue
 
+            # A renewal may have been approved while this pass was reading the
+            # panel; only the current order for the account may be notified.
+            current = asyncio.run(_fetch_order(panel_username))
+            if current is None or current.order_id != order.order_id:
+                asyncio.run(
+                    _release_notification(
+                        order.order_id, NotificationKind.USAGE_90, cycle_expires_at
+                    )
+                )
+                continue
+
             text = (
-                "⚠️ بیش از ۹۰٪ از حجم اشتراک «{}» شما مصرف شده است.\n"
+                "⚠️ ۹۰٪ یا بیشتر از حجم اشتراک «{}» شما مصرف شده است.\n"
                 "برای جلوگیری از قطع شدن سرویس، لطفاً نسبت به تمدید یا خرید سرویس جدید اقدام کنید."
             ).format(_sub_title(order))
 
@@ -553,6 +647,8 @@ def _run_unused_nudge():
 @shared_task(
     bind=True,
     max_retries=1,
+    soft_time_limit=240,
+    time_limit=300,
 )
 def send_unused_test_nudge(*args, **kwargs):
     """Celery entrypoint for the never-used onboarding nudge."""

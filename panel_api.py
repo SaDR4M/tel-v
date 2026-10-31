@@ -19,6 +19,16 @@ class PanelAPIError(Exception):
     pass
 
 
+PANEL_REQUEST_TIMEOUT = aiohttp.ClientTimeout(
+    total=30, connect=10, sock_read=30
+)
+
+
+def _session() -> aiohttp.ClientSession:
+    """Panel calls must never hang a Celery worker indefinitely."""
+    return aiohttp.ClientSession(timeout=PANEL_REQUEST_TIMEOUT)
+
+
 class UserStatus(str, enum.Enum):
     ACTIVE = "active"
     ON_HOLD = "on_hold"
@@ -60,7 +70,7 @@ class PanelClient:
         """GET a JSON endpoint; network failures surface as PanelAPIError so
         callers only ever handle one exception type."""
         try:
-            async with aiohttp.ClientSession() as session:
+            async with _session() as session:
                 headers = await self._headers(session)
                 async with session.get(
                     f"{settings.PANEL_BASE_URL}{path}",
@@ -115,7 +125,7 @@ class PanelClient:
             "note": str(telegram_id),
         }
 
-        async with aiohttp.ClientSession() as session:
+        async with _session() as session:
             headers = await self._headers(session)
             async with session.post(
                 f"{settings.PANEL_BASE_URL}/api/user",
@@ -129,7 +139,7 @@ class PanelClient:
                 return await resp.json()
 
     async def get_user(self, username: str) -> dict | None:
-        async with aiohttp.ClientSession() as session:
+        async with _session() as session:
             headers = await self._headers(session)
             async with session.get(
                 f"{settings.PANEL_BASE_URL}/api/user/{username}",
@@ -144,7 +154,7 @@ class PanelClient:
                 return await resp.json()
 
     async def modify_user(self, username: str, **fields) -> dict:
-        async with aiohttp.ClientSession() as session:
+        async with _session() as session:
             headers = await self._headers(session)
             async with session.put(
                 f"{settings.PANEL_BASE_URL}/api/user/{username}",
@@ -162,7 +172,7 @@ class PanelClient:
         """Zeroes out a user's used_traffic counter without touching their
         proxies/link. Marzban-style panels expose this as its own endpoint
         rather than as a field on the modify_user payload."""
-        async with aiohttp.ClientSession() as session:
+        async with _session() as session:
             headers = await self._headers(session)
             async with session.post(
                 f"{settings.PANEL_BASE_URL}/api/user/{username}/reset",
@@ -203,7 +213,7 @@ class PanelClient:
         users: list[dict] = []
         offset = 0
 
-        async with aiohttp.ClientSession() as session:
+        async with _session() as session:
             headers = await self._headers(session)
             while True:
                 params = {"offset": offset, "limit": page_size}

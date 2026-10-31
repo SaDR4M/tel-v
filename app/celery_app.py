@@ -42,13 +42,11 @@ celery_app.conf.update(
 def _ensure_schema(**_kwargs):
     """Apply additive migrations before the worker consumes any task.
 
-    The bot runs init_db() on startup, but the worker can be restarted on its
-    own (and systemd starts it in parallel with the bot). Without this, a task
-    touching a newly added column would fail with "no such column" until the
-    bot happened to restart first.
+    Must stay synchronous: this runs in the worker parent before the prefork
+    pool forks. Using the async engine here starts an aiosqlite thread that is
+    lost in the forked children, which then hang forever on their first DB
+    query (this silently stopped all reminder tasks in production).
     """
-    import asyncio
-
     import database as db
 
-    asyncio.run(db.init_db())
+    db.init_db_sync()
