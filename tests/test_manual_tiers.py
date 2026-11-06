@@ -46,23 +46,25 @@ class TierMenusTest(unittest.TestCase):
             self.assertFalse(
                 any("دستی" in b.text for row in kb.inline_keyboard for b in row))
 
-    def test_unlimited_tier_has_two_user_based_plans(self):
+    def test_unlimited_tier_has_one_user_based_plan(self):
         sums = {p["id"]: (int(p["price"]), p["data_limit_bytes"])
                 for p in settings.PLANS if p.get("tier") == "unlimited"}
-        self.assertEqual(sums.get("plan_u_300gb"), (750000, 300 * 1024**3))
-        self.assertEqual(sums.get("plan_u_400gb"), (850000, 400 * 1024**3))
-        self.assertNotIn("plan_u_unlimited", sums)  # replaced pair, no stale id
+        self.assertEqual(sums.get("plan_u_300gb"), (150000, 300 * 1024**3))
+        self.assertNotIn("plan_u_400gb", sums)
+        self.assertNotIn("plan_u_unlimited", sums)
 
     def test_tier_info_marketing_copy(self):
-        # Every offered tier has an info text; the unlimited one presents both
-        # versions (caps are NOT shown per marketing decision) and the
-        # overuse quality warning.
+        # Every offered tier has an info text; the unlimited one presents the
+        # single 2-user version and location caption (caps are NOT shown per
+        # marketing decision), plus the overuse quality warning.
         tiers_present = {p.get("tier", "vip") for p in settings.PLANS}
         for tier in tiers_present:
             self.assertIn(tier, keyboards.TIER_INFO)
         info = keyboards.TIER_INFO["unlimited"]
-        self.assertIn("نسخه 2 کاربره", info)
-        self.assertIn("نسخه 3 کاربره", info)
+        self.assertIn("یک نسخه: 2 کاربره", info)
+        self.assertNotIn("3 کاربره", info)
+        self.assertIn("ONE LOCATION", info)
+        self.assertIn("USA", info)
         self.assertNotIn("گیگ", info)   # caps deliberately hidden
         self.assertIn("افت کیفیت", info)
 

@@ -71,12 +71,22 @@ def coupon_price(plan: dict, coupon: dict) -> int | None:
     """Final price for a plan with a coupon applied, or None if the coupon
     cannot apply (bad rate, or the plan has no data cap to price against).
 
-    final = min(list_price, rate_per_gb * gb) — a coupon never makes an
-    order more expensive than the list price.
+    A matching ``plan_prices`` entry is a fixed final price and takes priority
+    over per-GB pricing. Either way the coupon never makes an order more
+    expensive than the list price.
     """
+    list_price = int(plan["price"])
+    fixed_prices = coupon.get("plan_prices") or {}
+    if plan.get("id") in fixed_prices:
+        try:
+            fixed = int(fixed_prices[plan["id"]])
+        except (TypeError, ValueError):
+            return None
+        return min(list_price, fixed) if fixed > 0 else None
+
     rate = int(coupon.get("toman_per_gb") or 0)
     data_limit = int(plan.get("data_limit_bytes") or 0)
     if rate <= 0 or data_limit <= 0:
         return None
     gb = data_limit / (1024 ** 3)
-    return min(int(plan["price"]), int(rate * gb))
+    return min(list_price, int(rate * gb))

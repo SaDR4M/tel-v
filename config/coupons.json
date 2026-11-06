@@ -1,10 +1,13 @@
 [
   {
     "code": "FRIENDS",
-    "toman_per_gb": 4500
+    "toman_per_gb": 4500,
+    "plan_prices": {
+      "plan_u_300gb": 125000
+    }
   },
   {
-"code": "AVAL",
-"toman_per_gb": 4500
+    "code": "AVAL",
+    "toman_per_gb": 4500
   }
 ]
