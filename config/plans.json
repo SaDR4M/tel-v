@@ -81,6 +81,6 @@
     "data_limit_bytes": 322122547200,
     "duration_days": 30,
     "tier": "unlimited",
-    "manual": tru
+    "manual": true
   }
 ]
