@@ -19,8 +19,8 @@ Always use `.venv/bin/python`; the system `python3` has no `celery`, so importin
   root. In this checkout `.env` lives one level above the repo root, and there is
   no `.env.example` in the tree despite the README referencing it.
 - `config/plans.json` / `config/coupons.json` are config-as-code (reprice without
-  code changes). Plans carry a `tier` (`vip` / `eco` / `unlimited`); `eco` and
-  `unlimited` set `"manual": true`. Read them via `settings.get_plan(id)` and
+  code changes). Plans carry a `tier` (`vip` / `unlimited`); `unlimited` sets
+  `"manual": true`. Read them via `settings.get_plan(id)` and
   `settings.coupon_price(plan, coupon)`.
 
 ## Architecture notes (not obvious from filenames)
@@ -31,10 +31,10 @@ Always use `.venv/bin/python`; the system `python3` has no `celery`, so importin
 - The panel is the source of truth for status/usage/expiry. The `orders` table
   only maps a Telegram user to a panel username (and, for manual tiers, holds a
   `manual_link`). Do not decide "used/expired" from the DB — read the panel.
-- Manual tiers (`eco`, `unlimited`): no panel account is created. An admin
-  approves, then replies to the order receipt with the subscription link, stored
-  in `orders.manual_link`. Only accounts with a bot-side panel username (VIP) are
-  renewable; eco/unlimited renew by repurchasing.
+- Manual tier (`unlimited`): no panel account is created. An admin approves,
+  then replies to the order receipt with the subscription link, stored in
+  `orders.manual_link`. Only accounts with a bot-side panel username (VIP) are
+  renewable; unlimited renews by repurchasing.
 - Panel client is `panel_api.py` (Marzban schema: `POST /api/admin/token`,
   create/fetch/modify users). It's the only file to change if the panel API
   differs; it uses `aiohttp` and caches the token ~55 min.

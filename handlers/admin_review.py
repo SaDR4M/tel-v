@@ -117,9 +117,9 @@ async def cb_admin_approve(callback: CallbackQuery, bot: Bot):
     else:
         is_manual = bool(plan and plan.get("manual"))
         if is_manual:
-            # Eco/Unlimited tiers: no panel account is created here — the
-            # admin builds it manually and delivers the link by replying to
-            # this order message with the subscription URL.
+            # Unlimited tier: no panel account is created here — the admin
+            # builds it manually and delivers the link by replying to this
+            # order message with the subscription URL.
             expire_at = datetime.now() + timedelta(days=int(plan["duration_days"]))
             await db.set_order_status(order_id, "approved")
             await db.set_order_expire_at(order_id, expire_at)

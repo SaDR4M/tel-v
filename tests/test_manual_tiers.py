@@ -1,5 +1,5 @@
-"""New subscription tiers: VIP (auto-provisioned) vs Eco/Unlimited (created
-manually by the admin, link delivered by replying to the order receipt)."""
+"""Subscription tiers: VIP (auto-provisioned) vs Unlimited (created manually
+by the admin, link delivered by replying to the order receipt)."""
 import asyncio
 import sys
 import unittest
@@ -32,9 +32,14 @@ class TierMenusTest(unittest.TestCase):
         for tier in tiers_present:
             self.assertIn(f"tierplans:{tier}", cbs)
         self.assertIn("menu:home", cbs)
+        self.assertNotIn("tierplans:eco", cbs)
+
+    def test_economy_tier_is_removed(self):
+        self.assertFalse(any(p.get("tier") == "eco" for p in settings.PLANS))
+        self.assertNotIn("eco", keyboards.TIER_INFO)
 
     def test_plans_menu_is_tier_scoped_without_manual_hints(self):
-        for tier in ("vip", "eco", "unlimited"):
+        for tier in ("vip", "unlimited"):
             kb = keyboards.plans_menu(tier)
             buys = [b for row in kb.inline_keyboard for b in row
                     if b.callback_data.startswith("buy:")]
@@ -149,7 +154,7 @@ def _link_message(admin_message_id, text, user_id):
 
 class LinkDeliveryTest(unittest.TestCase):
     def test_receive_manual_link_stores_link_and_dms_buyer(self):
-        order = {"order_id": 503, "telegram_id": 42, "plan_id": "plan_e_50gb",
+        order = {"order_id": 503, "telegram_id": 42, "plan_id": "plan_u_300gb",
                  "status": "approved", "panel_username": None}
         message = _link_message(777, "ایجاد شد 👇 https://sub.example.com/s/abc123", _admin_id())
         bot = SimpleNamespace(send_message=AsyncMock(), edit_message_caption=AsyncMock())
@@ -227,7 +232,7 @@ class MysubManualViewTest(unittest.TestCase):
 
 
 class RenewalScopeTest(unittest.TestCase):
-    """Cross-tier renewal must be impossible: eco/unlimited accounts are not
+    """Cross-tier renewal must be impossible: unlimited accounts are not
     bot-owned (no panel_username) so they can never be renewed with the bot's
     panel — a VIP account is only ever extended by VIP plans."""
 
@@ -238,8 +243,8 @@ class RenewalScopeTest(unittest.TestCase):
     def test_manual_orders_never_reachable_via_renewal(self):
         shopper = 999002
         try:
-            eco = _run(db.create_order(
-                telegram_id=shopper, plan_id="plan_e_50gb",
+            manual = _run(db.create_order(
+                telegram_id=shopper, plan_id="plan_u_300gb",
                 requested_username="caps-shopper", receipt_file_id="t",
                 expire_at=datetime.now() + timedelta(days=30),
             ))
@@ -256,17 +261,18 @@ class RenewalScopeTest(unittest.TestCase):
 
     def test_low_renewable_message_hints_reorder_for_manual_tiers(self):
         import handlers.renewal as renewal
-        manual_order = {"order_id": 1, "plan_id": "plan_e_50gb"}
+        manual_order = {"order_id": 1, "plan_id": "plan_u_300gb"}
         with patch.object(renewal, "_fetch_renewable_subs", AsyncMock(return_value=[])), \
              patch("database.get_active_orders", AsyncMock(return_value=[manual_order])):
             text, kb = _run(renewal._show_renewal_list(999002))
         self.assertIn("خرید مجدد", text)
+        self.assertIn("نامحدود", text)
         self.assertTrue(len(kb.inline_keyboard), 1)
 
         with patch.object(renewal, "_fetch_renewable_subs", AsyncMock(return_value=[])), \
              patch("database.get_active_orders", AsyncMock(return_value=[])):
             text, _ = _run(renewal._show_renewal_list(999002))
-        self.assertNotIn("اکونومی", text)
+        self.assertNotIn("نامحدود", text)
 
 
 class ManualLinkDbRoundTripTest(unittest.TestCase):
@@ -280,7 +286,7 @@ class ManualLinkDbRoundTripTest(unittest.TestCase):
     def test_manual_link_roundtrip(self):
         oid = _run(db.create_order(
             telegram_id=self.SHOP_TG,
-            plan_id="plan_e_50gb",
+            plan_id="plan_u_300gb",
             requested_username="manuallink-tester",
             receipt_file_id="test-file",
             expire_at=datetime.now() + timedelta(days=30),

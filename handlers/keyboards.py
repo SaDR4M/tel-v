@@ -61,11 +61,10 @@ main_reply_keyboard = ReplyKeyboardMarkup(
 )
 
 def tiers_menu() -> InlineKeyboardMarkup:
-    """Category menu: VIP (auto-provisioned), Eco and Unlimited (created
-    manually by the admin, link delivered as a reply to the order)."""
+    """Category menu: VIP (auto-provisioned) and Unlimited (created manually
+    by the admin, link delivered as a reply to the order)."""
     b = InlineKeyboardBuilder()
     b.button(text="VIP — پرسرعت و پایدار", callback_data="tierplans:vip")
-    b.button(text="اکونومی — کم‌خرج", callback_data="tierplans:eco")
     b.button(text="نامحدود", callback_data="tierplans:unlimited")
     b.button(text="⬅️ بازگشت", callback_data="menu:home")
     b.adjust(1)
@@ -73,7 +72,7 @@ def tiers_menu() -> InlineKeyboardMarkup:
 
 
 # Marketing copy shown above each tier's plan list. The manual-delivery
-# mechanics of eco/unlimited stay invisible to buyers.
+# mechanics of the unlimited tier stay invisible to buyers.
 TIER_INFO = {
     "vip": (
         "<b>پلن VIP</b>\n\n"
@@ -81,13 +80,6 @@ TIER_INFO = {
         "• مناسب برای استفاده از ابزارهای هوش مصنوعی (AI)\n"
         "• ایده‌آل برای برنامه‌نویسی و کدنویسی\n"
         "• کیفیت بالا و تجربه‌ای روان، بدون قطعی"
-    ),
-    "eco": (
-        "<b>پلن اکونومی</b>\n\n"
-        "کیفیت مناسب برای استفاده روزمره\n\n"
-        "• مناسب برای وب‌گردی و استفاده روزانه\n"
-        "• مناسب برای شبکه‌های اجتماعی و پیام‌رسان‌ها\n"
-        "• سرعت و کیفیت قابل‌قبول برای کارهای معمول\n\n"
     ),
     "unlimited": (
         "<b>پلن نامحدود</b>\n\n"
@@ -163,9 +155,9 @@ def no_renewable_subs_keyboard() -> InlineKeyboardMarkup:
 
 
 def renewal_plans_menu() -> InlineKeyboardMarkup:
-    """Renewal plan list. Eco/Unlimited are manual-tier products without a
-    bot panel account, so renewals for them are handled by the admin —
-    only VIP plans are offered for automated renewal."""
+    """Renewal plan list. Unlimited is a manual-tier product without a bot
+    panel account, so its renewal is handled by the admin — only VIP plans
+    are offered for automated renewal."""
     b = InlineKeyboardBuilder()
     for plan in settings.PLANS:
         if plan.get("tier", "vip") != "vip":

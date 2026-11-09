@@ -27,8 +27,8 @@ logger = logging.getLogger(__name__)
 # expiry, so precedence and unlimited plans are handled by the panel itself).
 # ---------------------------------------------------------------------------
 async def _fetch_provisioned_orders() -> List[Order]:
-    # Orders without a panel_username are manual-tier (eco/unlimited): the
-    # admin manages them on the panel by hand, so they have nothing to sync.
+    # Orders without a panel_username are manual-tier (unlimited): the admin
+    # manages them on the panel by hand, so they have nothing to sync.
     async with SessionLocal() as session:
         result = await session.execute(
             select(Order).where(

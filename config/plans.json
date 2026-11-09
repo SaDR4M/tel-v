@@ -48,33 +48,6 @@
     "tier": "vip"
   },
   {
-    "id": "plan_e_50gb",
-    "name": "50 گیگ / 30 روز (اکونومی)",
-    "price": "200000",
-    "data_limit_bytes": 53687091200,
-    "duration_days": 30,
-    "tier": "eco",
-    "manual": true
-  },
-  {
-    "id": "plan_e_75gb",
-    "name": "75 گیگ / 30 روز (اکونومی)",
-    "price": "295000",
-    "data_limit_bytes": 80530636800,
-    "duration_days": 30,
-    "tier": "eco",
-    "manual": true
-  },
-  {
-    "id": "plan_e_100gb",
-    "name": "100 گیگ / 30 روز (اکونومی)",
-    "price": "380000",
-    "data_limit_bytes": 107374182400,
-    "duration_days": 30,
-    "tier": "eco",
-    "manual": true
-  },
-  {
     "id": "plan_u_300gb",
     "name": "نامحدود — 2 کاربر / 30 روز",
     "price": "150000",
