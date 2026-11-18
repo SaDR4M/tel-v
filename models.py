@@ -59,7 +59,9 @@ class Order(Base):
     plan_id: Mapped[str] = mapped_column(String)
     requested_username: Mapped[str | None] = mapped_column(String, nullable=True)
     order_type: Mapped[str] = mapped_column(String, default="purchase")  # purchase / renewal
-    target_panel_username: Mapped[str | None] = mapped_column(String, nullable=True)  # set when order_type == "renewal"
+    target_panel_username: Mapped[str | None] = mapped_column(String, nullable=True)
+    target_provider: Mapped[str | None] = mapped_column(String, nullable=True)
+    target_provider_user_id: Mapped[str | None] = mapped_column(String, nullable=True)
     status: Mapped[OrderStatus] = mapped_column(
         Enum(
             OrderStatus,
@@ -71,9 +73,15 @@ class Order(Base):
     )
     receipt_file_id: Mapped[str | None] = mapped_column(String, nullable=True)
     admin_message_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Legacy/VIP panel account name. New provider-backed orders use the
+    # provider_* fields below instead.
     panel_username: Mapped[str | None] = mapped_column(String, nullable=True)
-    # Manual-tier orders (unlimited): the admin creates the account outside
-    # the bot and delivers the subscription URL saved here.
+    provider: Mapped[str | None] = mapped_column(String, nullable=True)
+    provider_user_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    provider_username: Mapped[str | None] = mapped_column(String, nullable=True)
+    subscription_url: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Legacy manual-delivery link. Kept for old orders; unlimited is now
+    # provisioned through its provider API.
     manual_link: Mapped[str | None] = mapped_column(String, nullable=True)
     coupon_code: Mapped[str | None] = mapped_column(String, nullable=True)  # coupon applied at purchase, if any
     final_price: Mapped[int | None] = mapped_column(Integer, nullable=True)  # amount actually paid (toman)

@@ -86,10 +86,49 @@ def _fmt_bytes(n: int) -> str:
     return f"{gb:.2f} گیگابایت"
 
 
+async def _build_provider_sub_text(order: dict) -> str:
+    """Build subscription text through the provider-neutral service."""
+    from services.subscriptions.base import SubscriptionError
+    from services.subscriptions.registry import get_provider
+
+    try:
+        provider = get_provider(order["provider"])
+        user = await provider.get(str(order["provider_user_id"]))
+    except SubscriptionError as exc:
+        link = (order.get("subscription_url") or "").strip()
+        if link:
+            return MANUAL_DELIVERED_TEMPLATE.format(link=link)
+        return f"⚠️ اتصال به سرویس ناموفق بود: {exc}"
+
+    if not user:
+        return "اشتراکی برای حساب شما یافت نشد."
+
+    expire_str = (
+        user.expires_at.strftime("%Y-%m-%d")
+        if user.expires_at
+        else "نامشخص"
+    )
+    status_fa = STATUS_LABELS.get(user.status, user.status)
+    used = _fmt_bytes(user.used_bytes)
+    limit = "نامحدود" if user.quota_bytes == 0 else _fmt_bytes(user.quota_bytes)
+    link = user.subscription_url or order.get("subscription_url") or "نامشخص"
+
+    return (
+        f"📱 <b>اشتراک شما</b>\n\n"
+        f"وضعیت: <b>{status_fa}</b>\n"
+        f"مصرف‌شده: {used} از {limit}\n"
+        f"تاریخ انقضا: {expire_str}\n\n"
+        f"لینک اشتراک:\n<code>{link}</code>"
+    )
+
+
 async def _build_sub_text(order_id: int) -> str:
     order = await db.get_order(order_id)
     if not order:
         return "سفارش پیدا نشد."
+
+    if order.get("provider") and order.get("provider_user_id"):
+        return await _build_provider_sub_text(order)
 
     panel_username = order.get("panel_username")
     if not panel_username:

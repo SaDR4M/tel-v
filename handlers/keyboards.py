@@ -61,8 +61,7 @@ main_reply_keyboard = ReplyKeyboardMarkup(
 )
 
 def tiers_menu() -> InlineKeyboardMarkup:
-    """Category menu: VIP (auto-provisioned) and Unlimited (created manually
-    by the admin, link delivered as a reply to the order)."""
+    """Category menu: VIP (auto-provisioned) and Unlimited (API-provisioned)."""
     b = InlineKeyboardBuilder()
     b.button(text="VIP — پرسرعت و پایدار", callback_data="tierplans:vip")
     b.button(text="نامحدود", callback_data="tierplans:unlimited")
@@ -71,8 +70,8 @@ def tiers_menu() -> InlineKeyboardMarkup:
     return b.as_markup()
 
 
-# Marketing copy shown above each tier's plan list. The manual-delivery
-# mechanics of the unlimited tier stay invisible to buyers.
+# Marketing copy shown above each tier's plan list. Provider/provisioning
+# mechanics stay invisible to buyers.
 TIER_INFO = {
     "vip": (
         "<b>پلن VIP</b>\n\n"
@@ -94,8 +93,8 @@ TIER_INFO = {
 
 
 def plans_menu(tier: str) -> InlineKeyboardMarkup:
-    """Plan list for one tier. `manual` tiers are provisioned by the admin —
-    that detail never reaches the user interface."""
+    """Plan list for one tier. Provider/provisioning details never reach the
+    user interface."""
     b = InlineKeyboardBuilder()
     for plan in settings.PLANS:
         if plan.get("tier", "vip") != tier:
@@ -137,10 +136,15 @@ def back_home() -> InlineKeyboardMarkup:
 
 
 def renewable_subs_keyboard(subs: list[dict]) -> InlineKeyboardMarkup:
-    """subs: list of {'panel_username': str, 'label': str}"""
+    """subs: provider-neutral subscription entries with provider + target."""
     b = InlineKeyboardBuilder()
     for sub in subs:
-        b.button(text=sub["label"], callback_data=f"renew_select:{sub['panel_username']}")
+        provider = sub.get("provider") or "vip_panel"
+        target = sub.get("target") or sub.get("panel_username")
+        b.button(
+            text=sub["label"],
+            callback_data=f"renew_select:{provider}:{target}",
+        )
     b.button(text="⬅️ بازگشت", callback_data="menu:home")
     b.adjust(1)
     return b.as_markup()
@@ -154,13 +158,11 @@ def no_renewable_subs_keyboard() -> InlineKeyboardMarkup:
     return b.as_markup()
 
 
-def renewal_plans_menu() -> InlineKeyboardMarkup:
-    """Renewal plan list. Unlimited is a manual-tier product without a bot
-    panel account, so its renewal is handled by the admin — only VIP plans
-    are offered for automated renewal."""
+def renewal_plans_menu(provider: str = "vip_panel") -> InlineKeyboardMarkup:
+    """Renewal plans belonging to the selected subscription's provider."""
     b = InlineKeyboardBuilder()
     for plan in settings.PLANS:
-        if plan.get("tier", "vip") != "vip":
+        if (plan.get("provider") or "vip_panel") != provider:
             continue
         b.button(
             text=f"{plan['name']} — {plan['price']} {settings.CURRENCY}",

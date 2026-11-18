@@ -336,8 +336,18 @@ def _order_block(r: dict) -> str:
         lines.append(f"✍️ نام انتخابی: {r['requested_username']}")
     if r.get("panel_username"):
         lines.append(f"🔑 حساب پنل: <code>{r['panel_username']}</code>")
+    elif r.get("provider_username"):
+        lines.append(
+            f"🔑 حساب {r.get('provider', 'API')}: "
+            f"<code>{r['provider_username']}</code>"
+        )
     elif r.get("target_panel_username"):
         lines.append(f"🔁 تمدید حساب: <code>{r['target_panel_username']}</code>")
+    elif r.get("target_provider_user_id"):
+        lines.append(
+            f"🔁 تمدید حساب {r.get('target_provider', 'API')}: "
+            f"<code>{r['target_provider_user_id']}</code>"
+        )
     elif r.get("manual_link"):
         lines.append("🌐 لینک دستی ثبت شده")
     if r.get("coupon_code"):

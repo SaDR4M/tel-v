@@ -63,6 +63,12 @@ def _ensure_order_columns(conn):
         "manual_link": "ALTER TABLE orders ADD COLUMN manual_link VARCHAR",
         "telegram_username": "ALTER TABLE orders ADD COLUMN telegram_username VARCHAR",
         "superseded_at": "ALTER TABLE orders ADD COLUMN superseded_at DATETIME",
+        "provider": "ALTER TABLE orders ADD COLUMN provider VARCHAR",
+        "provider_user_id": "ALTER TABLE orders ADD COLUMN provider_user_id VARCHAR",
+        "provider_username": "ALTER TABLE orders ADD COLUMN provider_username VARCHAR",
+        "subscription_url": "ALTER TABLE orders ADD COLUMN subscription_url VARCHAR",
+        "target_provider": "ALTER TABLE orders ADD COLUMN target_provider VARCHAR",
+        "target_provider_user_id": "ALTER TABLE orders ADD COLUMN target_provider_user_id VARCHAR",
     }
     for column, statement in additions.items():
         if column in existing:
@@ -115,6 +121,8 @@ async def create_order(
     telegram_username: str | None = None,
     order_type: str = "purchase",
     target_panel_username: str | None = None,
+    target_provider: str | None = None,
+    target_provider_user_id: str | None = None,
     coupon_code: str | None = None,
     final_price: int | None = None,
 ) -> int:
@@ -128,6 +136,8 @@ async def create_order(
             status="pending",
             order_type=order_type,
             target_panel_username=target_panel_username,
+            target_provider=target_provider,
+            target_provider_user_id=target_provider_user_id,
             coupon_code=coupon_code,
             final_price=final_price,
             expire_at=expire_at
@@ -252,6 +262,105 @@ async def set_manual_link(order_id: int, manual_link: str):
         if order:
             order.manual_link = manual_link
             await session.commit()
+
+
+async def get_latest_provider_order(
+    telegram_id: int, provider: str
+) -> dict | None:
+    """Newest non-superseded order linked to an external provider account."""
+    async with SessionLocal() as session:
+        result = await session.execute(
+            select(Order)
+            .where(
+                Order.telegram_id == telegram_id,
+                Order.provider == provider,
+                Order.provider_user_id.isnot(None),
+                Order.superseded_at.is_(None),
+            )
+            .order_by(Order.created_at.desc())
+            .limit(1)
+        )
+        order = result.scalar_one_or_none()
+        if not order:
+            return None
+        return {c.name: getattr(order, c.name) for c in order.__table__.columns}
+
+
+async def get_provider_order_by_user(
+    telegram_id: int,
+    provider: str,
+    provider_user_id: str,
+) -> dict | None:
+    """Current order for one external provider account."""
+    async with SessionLocal() as session:
+        result = await session.execute(
+            select(Order)
+            .where(
+                Order.telegram_id == telegram_id,
+                Order.provider == provider,
+                Order.provider_user_id == str(provider_user_id),
+                Order.superseded_at.is_(None),
+            )
+            .order_by(Order.created_at.desc())
+            .limit(1)
+        )
+        order = result.scalar_one_or_none()
+        if not order:
+            return None
+        return {c.name: getattr(order, c.name) for c in order.__table__.columns}
+
+
+async def get_provider_orders(
+    telegram_id: int,
+    provider: str,
+) -> list[dict]:
+    """Current provider-backed orders for the renewal menu."""
+    async with SessionLocal() as session:
+        result = await session.execute(
+            select(Order)
+            .where(
+                Order.telegram_id == telegram_id,
+                Order.provider == provider,
+                Order.provider_user_id.isnot(None),
+                Order.superseded_at.is_(None),
+                Order.status.notin_(UNPROVISIONED_STATUSES),
+            )
+            .order_by(Order.created_at.desc())
+        )
+        return [
+            {c.name: getattr(order, c.name) for c in order.__table__.columns}
+            for order in result.scalars().all()
+        ]
+
+
+async def approve_provider_order(
+    order_id: int,
+    *,
+    provider: str,
+    provider_user_id: str,
+    provider_username: str,
+    subscription_url: str,
+    expire_at: datetime,
+    status: str = "active",
+    supersede_order_id: int | None = None,
+):
+    """Persist a provider-created subscription and retire the order it extends."""
+    async with SessionLocal() as session:
+        async with session.begin():
+            if supersede_order_id is not None:
+                previous = await session.get(Order, supersede_order_id)
+                if previous and previous.superseded_at is None:
+                    previous.superseded_at = datetime.now()
+
+            order = await session.get(Order, order_id)
+            if order is None:
+                raise ValueError(f"Order {order_id} not found")
+            order.provider = provider
+            order.provider_user_id = str(provider_user_id)
+            order.provider_username = provider_username
+            order.subscription_url = subscription_url
+            order.expire_at = expire_at
+            order.status = status
 
 
 async def get_order_by_admin_message(admin_message_id: int) -> dict | None:

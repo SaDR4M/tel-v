@@ -19,8 +19,9 @@ Always use `.venv/bin/python`; the system `python3` has no `celery`, so importin
   root. In this checkout `.env` lives one level above the repo root, and there is
   no `.env.example` in the tree despite the README referencing it.
 - `config/plans.json` / `config/coupons.json` are config-as-code (reprice without
-  code changes). Plans carry a `tier` (`vip` / `unlimited`); `unlimited` sets
-  `"manual": true`. Read them via `settings.get_plan(id)` and
+  code changes). Plans carry a `tier` (`vip` / `unlimited`) and optionally a
+  `provider`; VIP defaults to `vip_panel`, while Unlimited uses `dante_api`.
+  Read them via `settings.get_plan(id)` and
   `settings.coupon_price(plan, coupon)`.
 
 ## Architecture notes (not obvious from filenames)
@@ -28,16 +29,22 @@ Always use `.venv/bin/python`; the system `python3` has no `celery`, so importin
   `docs_support` so admin replies to support requests (matched by the
   `ReplyToOrder` filter against `orders.admin_message_id`) aren't swallowed by
   support forwarding.
-- The panel is the source of truth for status/usage/expiry. The `orders` table
-  only maps a Telegram user to a panel username (and, for manual tiers, holds a
-  `manual_link`). Do not decide "used/expired" from the DB — read the panel.
-- Manual tier (`unlimited`): no panel account is created. An admin approves,
-  then replies to the order receipt with the subscription link, stored in
-  `orders.manual_link`. Only accounts with a bot-side panel username (VIP) are
-  renewable; unlimited renews by repurchasing.
-- Panel client is `panel_api.py` (Marzban schema: `POST /api/admin/token`,
-  create/fetch/modify users). It's the only file to change if the panel API
-  differs; it uses `aiohttp` and caches the token ~55 min.
+- Subscription integrations live behind `services/subscriptions/`: handlers and
+  Celery tasks resolve the plan/order provider instead of importing a panel
+  client directly. Adding or replacing a provider means adding an adapter and a
+  registry entry.
+- The provider is the source of truth for status/usage/expiry. `orders` stores
+  the generic `provider`, `provider_user_id`, `provider_username`, and
+  `subscription_url` fields. Legacy VIP orders still use `panel_username`; do
+  not decide "used/expired" from the DB — read the provider.
+- Unlimited is auto-provisioned by the DANTE API on admin approval (`quota_gb=0`,
+  ISO date expiry, no `configs` field). The API's generated `email` is the
+  unique panel identifier stored as `provider_username`; the API `name` is the
+  buyer-requested display name. A new purchase always creates a new API user;
+  only the explicit renewal flow extends the selected user and supersedes the
+  previous order. VIP stays on the Marzban-compatible panel.
+- VIP panel client is `panel_api.py` (Marzban schema: `POST /api/admin/token`,
+  create/fetch/modify users). It uses `aiohttp` and caches the token ~55 min.
 - Payment screens must use `utils.CARD_NUMBER` / `utils.payment_card_line()`; the
   raw digit string renders reversed inside RTL messages.
 

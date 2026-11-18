@@ -465,6 +465,12 @@ class SchemaUpgradeTest(unittest.TestCase):
                 }
             self.assertIn("superseded_at", columns)
             self.assertIn("telegram_username", columns)
+            self.assertIn("provider", columns)
+            self.assertIn("provider_user_id", columns)
+            self.assertIn("provider_username", columns)
+            self.assertIn("subscription_url", columns)
+            self.assertIn("target_provider", columns)
+            self.assertIn("target_provider_user_id", columns)
         finally:
             engine.dispose()
             os.unlink(path)

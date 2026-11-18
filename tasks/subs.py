@@ -12,10 +12,12 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 # local
 from database import SessionLocal, Order, NotificationLog, NotificationKind, NotificationStatus
 from models import UNPROVISIONED_STATUSES, PANEL_STATUS_TO_ORDER_STATUS
-from sqlalchemy import select, update, delete, func
+from sqlalchemy import select, update, delete, func, or_
 from sqlalchemy.exc import IntegrityError
 from config import settings
 from panel_api import panel, UserStatus
+from services.subscriptions.base import SubscriptionError
+from services.subscriptions.registry import get_provider
 from handlers.test_plan import TEST_PLAN_ID
 
 logger = logging.getLogger(__name__)
@@ -27,13 +29,15 @@ logger = logging.getLogger(__name__)
 # expiry, so precedence and unlimited plans are handled by the panel itself).
 # ---------------------------------------------------------------------------
 async def _fetch_provisioned_orders() -> List[Order]:
-    # Orders without a panel_username are manual-tier (unlimited): the admin
-    # manages them on the panel by hand, so they have nothing to sync.
+    # Legacy manual orders have neither identifier and are not synced.
     async with SessionLocal() as session:
         result = await session.execute(
             select(Order).where(
                 Order.status.notin_(UNPROVISIONED_STATUSES),
-                Order.panel_username.isnot(None),
+                or_(
+                    Order.panel_username.isnot(None),
+                    Order.provider_user_id.isnot(None),
+                ),
             )
         )
         return result.scalars().all()
@@ -77,7 +81,7 @@ async def _order_status_bulk_update(orders: List[Order]):
     # autoretry_for((Exception,))
 )
 def sync_order_statuses(*args, **kwargs):
-    """Mirror every provisioned order's status from the panel.
+    """Mirror every provisioned order's status from its provider.
 
     NOTE: This task runs before the reminder tasks so they see fresh statuses.
     """
@@ -85,24 +89,56 @@ def sync_order_statuses(*args, **kwargs):
     if not orders:
         return 0
 
-    all_users = asyncio.run(panel.get_users_list(status=None))
-    panel_statuses = _panel_statuses_by_username(all_users)
-
     to_update: List[Order] = []
-    for order in orders:
-        panel_status = panel_statuses.get(order.panel_username)
-        if panel_status is None:
-            logger.warning(
-                "Order %s: panel user '%s' not found, status left unchanged.",
-                order.order_id,
-                order.panel_username,
-            )
-            continue
 
-        new_status = PANEL_STATUS_TO_ORDER_STATUS.get(panel_status)
-        if new_status is not None and new_status != order.status:
-            order.status = new_status
-            to_update.append(order)
+    vip_orders = [
+        order
+        for order in orders
+        if (order.provider or "vip_panel") == "vip_panel"
+        and order.panel_username
+    ]
+    if vip_orders:
+        all_users = asyncio.run(panel.get_users_list(status=None))
+        panel_statuses = _panel_statuses_by_username(all_users)
+        for order in vip_orders:
+            panel_status = panel_statuses.get(order.panel_username)
+            if panel_status is None:
+                logger.warning(
+                    "Order %s: panel user '%s' not found, status left unchanged.",
+                    order.order_id,
+                    order.panel_username,
+                )
+                continue
+            new_status = PANEL_STATUS_TO_ORDER_STATUS.get(panel_status)
+            if new_status is not None and new_status != order.status:
+                order.status = new_status
+                to_update.append(order)
+
+    dante_orders = [
+        order
+        for order in orders
+        if order.provider == "dante_api" and order.provider_user_id
+    ]
+    if dante_orders:
+        try:
+            users = asyncio.run(get_provider("dante_api").list_users())
+        except SubscriptionError:
+            logger.exception("DANTE status sync failed; other providers continue.")
+            users = []
+        statuses = {user.user_id: user.status for user in users}
+        for order in dante_orders:
+            provider_status = statuses.get(str(order.provider_user_id))
+            if provider_status is None:
+                logger.warning(
+                    "Order %s: DANTE user '%s' not found, status left unchanged.",
+                    order.order_id,
+                    order.provider_user_id,
+                )
+                continue
+            new_status = PANEL_STATUS_TO_ORDER_STATUS.get(provider_status)
+            if new_status is not None and new_status != order.status:
+                order.status = new_status
+                to_update.append(order)
 
     asyncio.run(_order_status_bulk_update(to_update))
     logger.info("Status sync: %d order(s) updated.", len(to_update))
@@ -110,10 +146,10 @@ def sync_order_statuses(*args, **kwargs):
 
 # ------------------------------------------------------
 async def _active_panel_usernames() -> set[str]:
-    """Panel usernames whose subscription is currently active.
+    """VIP panel usernames whose subscription is currently active.
 
-    Expiry reminders are limited to active subscriptions. Manual-tier orders
-    have no panel account, so they are handled separately by the caller.
+    Expiry reminders are limited to active subscriptions. Manual-tier and
+    provider-backed orders are handled separately by the caller.
     """
     users = await panel.get_users_list(status=UserStatus.ACTIVE.value)
     return {
@@ -122,6 +158,11 @@ async def _active_panel_usernames() -> set[str]:
         if user.get("username")
         and (user.get("status") or "").lower() == UserStatus.ACTIVE.value
     }
+
+
+async def _active_dante_ids() -> set[str]:
+    users = await get_provider("dante_api").list_users()
+    return {user.user_id for user in users if user.status == "active"}
 
 
 async def _scan_subscriptions_expire_date():
@@ -144,12 +185,40 @@ async def _scan_subscriptions_expire_date():
     if not orders:
         return orders
 
-    active_usernames = await _active_panel_usernames()
-    return [
-        order for order in orders
-        # Manual-tier orders (no panel account) keep their reminder.
-        if not order.panel_username or order.panel_username in active_usernames
-    ]
+    provider_names = {
+        order.provider
+        or ("vip_panel" if order.panel_username else "manual")
+        for order in orders
+    }
+    active_usernames = (
+        await _active_panel_usernames()
+        if "vip_panel" in provider_names
+        else set()
+    )
+    if "dante_api" in provider_names:
+        try:
+            active_dante_ids = await _active_dante_ids()
+        except SubscriptionError:
+            logger.exception(
+                "Expiry reminder: DANTE active-user lookup failed; "
+                "skipping DANTE orders for this pass."
+            )
+            active_dante_ids = set()
+    else:
+        active_dante_ids = set()
+
+    filtered = []
+    for order in orders:
+        if order.provider == "dante_api":
+            if order.provider_user_id and str(order.provider_user_id) in active_dante_ids:
+                filtered.append(order)
+        elif order.panel_username:
+            if order.panel_username in active_usernames:
+                filtered.append(order)
+        else:
+            # Legacy manual-tier orders have nothing live to query.
+            filtered.append(order)
+    return filtered
 
 
 async def _claim_notification(

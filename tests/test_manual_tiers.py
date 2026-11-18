@@ -1,5 +1,4 @@
-"""Subscription tiers: VIP (auto-provisioned) vs Unlimited (created manually
-by the admin, link delivered by replying to the order receipt)."""
+"""Subscription tiers: VIP (panel-provisioned) vs Unlimited (API-provisioned)."""
 import asyncio
 import sys
 import unittest
@@ -52,11 +51,14 @@ class TierMenusTest(unittest.TestCase):
                 any("دستی" in b.text for row in kb.inline_keyboard for b in row))
 
     def test_unlimited_tier_has_one_user_based_plan(self):
-        sums = {p["id"]: (int(p["price"]), p["data_limit_bytes"])
-                for p in settings.PLANS if p.get("tier") == "unlimited"}
-        self.assertEqual(sums.get("plan_u_300gb"), (150000, 300 * 1024**3))
-        self.assertNotIn("plan_u_400gb", sums)
-        self.assertNotIn("plan_u_unlimited", sums)
+        plans = {p["id"]: p for p in settings.PLANS
+                 if p.get("tier") == "unlimited"}
+        plan = plans["plan_u_300gb"]
+        self.assertEqual(int(plan["price"]), 150000)
+        self.assertEqual(plan["data_limit_bytes"], 0)
+        self.assertEqual(plan["provider"], "dante_api")
+        self.assertNotIn("plan_u_400gb", plans)
+        self.assertNotIn("plan_u_unlimited", plans)
 
     def test_tier_info_marketing_copy(self):
         # Every offered tier has an info text; the unlimited one presents the
@@ -73,13 +75,18 @@ class TierMenusTest(unittest.TestCase):
         self.assertNotIn("گیگ", info)   # caps deliberately hidden
         self.assertIn("افت کیفیت", info)
 
-    def test_renewal_plans_menu_vip_only(self):
-        kb = keyboards.renewal_plans_menu()
-        for row in kb.inline_keyboard:
-            for b in row:
-                if b.callback_data.startswith("buy:"):
-                    plan = settings.get_plan(b.callback_data.split(":", 1)[1])
-                    self.assertEqual(plan.get("tier", "vip"), "vip")
+    def test_renewal_plans_are_provider_scoped(self):
+        vip = {
+            b.callback_data for row in keyboards.renewal_plans_menu("vip_panel").inline_keyboard
+            for b in row if b.callback_data.startswith("renew_plan:")
+        }
+        unlimited = {
+            b.callback_data for row in keyboards.renewal_plans_menu("dante_api").inline_keyboard
+            for b in row if b.callback_data.startswith("renew_plan:")
+        }
+        self.assertIn("renew_plan:plan_1m_10gb", vip)
+        self.assertNotIn("renew_plan:plan_u_300gb", vip)
+        self.assertEqual(unlimited, {"renew_plan:plan_u_300gb"})
 
 
 def _approve_callback(order_id):
@@ -92,36 +99,76 @@ def _approve_callback(order_id):
     )
 
 
-class ManualApproveTest(unittest.TestCase):
-    @classmethod
-    def setUpClass(cls):
-        # The ORM now knows `manual_link`; the dev DB gets the column via the
-        # additive migration that init_db runs at bot startup.
-        _run(db.init_db())
-
-    def test_manual_approve_skips_panel_and_asks_for_link(self):
+class UnlimitedApproveTest(unittest.TestCase):
+    def _approve_unlimited(self, extended=False):
         plan = settings.get_plan("plan_u_300gb")
-        order = {"order_id": 501, "telegram_id": 42, "plan_id": plan["id"],
-                 "status": "pending", "order_type": "purchase"}
+        order = {
+            "order_id": 501, "telegram_id": 42, "plan_id": plan["id"],
+            "status": "pending", "order_type": "purchase",
+            "requested_username": "user",
+        }
         callback = _approve_callback(501)
         bot = SimpleNamespace(send_message=AsyncMock())
+        result = SimpleNamespace(
+            extended=extended,
+            user=SimpleNamespace(
+                subscription_url="https://sub.example.com/dante"
+            ),
+        )
         with patch("database.get_order", AsyncMock(return_value=order)), \
-             patch("database.set_order_status", AsyncMock()) as status, \
-             patch("database.set_order_expire_at", AsyncMock()) as expire, \
-             patch("database.get_panel_username", AsyncMock()) as get_panel, \
-             patch.object(admin_review.panel, "create_user", AsyncMock()) as create, \
-             patch.object(admin_review.panel, "get_user", AsyncMock()):
+             patch.object(
+                 admin_review, "approve_purchase",
+                 AsyncMock(return_value=result),
+             ) as approve:
+            _run(admin_review.cb_admin_approve(callback, bot))
+        return plan, order, bot, callback, approve
+
+    def test_unlimited_approve_provisions_and_sends_link(self):
+        _, order, bot, callback, approve = self._approve_unlimited()
+        approve.assert_awaited_once()
+        self.assertEqual(approve.await_args.args[1]["id"], "plan_u_300gb")
+        buyer_text = bot.send_message.await_args.kwargs["text"]
+        self.assertIn("https://sub.example.com/dante", buyer_text)
+        self.assertIn("آماده است", buyer_text)
+        caption = callback.message.edit_caption.await_args.kwargs["caption"]
+        self.assertIn("خودکار", caption)
+
+    def test_unlimited_approve_reports_extension(self):
+        _, _, bot, _, _ = self._approve_unlimited(extended=True)
+        buyer_text = bot.send_message.await_args.kwargs["text"]
+        self.assertIn("تمدید شد", buyer_text)
+
+    def test_unlimited_renewal_uses_provider_service(self):
+        plan = settings.get_plan("plan_u_300gb")
+        order = {
+            "order_id": 506, "telegram_id": 42, "plan_id": plan["id"],
+            "status": "pending", "order_type": "renewal",
+            "target_provider": "dante_api",
+            "target_provider_user_id": "dante-11",
+        }
+        callback = _approve_callback(506)
+        bot = SimpleNamespace(send_message=AsyncMock())
+        result = SimpleNamespace(
+            extended=True,
+            user=SimpleNamespace(
+                subscription_url="https://sub.example.com/same"
+            ),
+        )
+        with patch("database.get_order", AsyncMock(return_value=order)), \
+             patch.object(
+                 admin_review, "approve_renewal",
+                 AsyncMock(return_value=result),
+             ) as renew, \
+             patch.object(
+                 admin_review.panel, "renew_user", AsyncMock()
+             ) as panel_renew:
             _run(admin_review.cb_admin_approve(callback, bot))
 
-        create.assert_not_awaited()
-        get_panel.assert_not_awaited()  # _free_panel_username probing skipped
-        self.assertEqual(status.await_args.args[:2], (501, "approved"))
-        self.assertEqual(len(status.await_args.args), 2)  # no panel account linked
-        self.assertIsInstance(expire.await_args.args[1], datetime)
+        renew.assert_awaited_once()
+        panel_renew.assert_not_awaited()
         buyer_text = bot.send_message.await_args.kwargs["text"]
-        self.assertIn("آماده‌سازی", buyer_text)
-        caption = callback.message.edit_caption.await_args.kwargs["caption"]
-        self.assertIn("ریپلای", caption)
+        self.assertIn("تمدید با موفقیت", buyer_text)
+        self.assertIn("https://sub.example.com/same", buyer_text)
 
     def test_vip_approve_still_provisions_via_panel(self):
         plan = settings.get_plan("plan_1m_10gb")
@@ -232,9 +279,8 @@ class MysubManualViewTest(unittest.TestCase):
 
 
 class RenewalScopeTest(unittest.TestCase):
-    """Cross-tier renewal must be impossible: unlimited accounts are not
-    bot-owned (no panel_username) so they can never be renewed with the bot's
-    panel — a VIP account is only ever extended by VIP plans."""
+    """VIP panel usernames and Unlimited provider accounts stay in separate
+    renewal scopes; a VIP account is only ever extended by VIP plans."""
 
     @classmethod
     def setUpClass(cls):
@@ -259,20 +305,14 @@ class RenewalScopeTest(unittest.TestCase):
         finally:
             _run(db.delete_test_orders(shopper))
 
-    def test_low_renewable_message_hints_reorder_for_manual_tiers(self):
+    def test_empty_renewal_list_offers_new_purchase(self):
         import handlers.renewal as renewal
-        manual_order = {"order_id": 1, "plan_id": "plan_u_300gb"}
-        with patch.object(renewal, "_fetch_renewable_subs", AsyncMock(return_value=[])), \
-             patch("database.get_active_orders", AsyncMock(return_value=[manual_order])):
+        with patch.object(
+            renewal, "_fetch_renewable_subs", AsyncMock(return_value=[])
+        ):
             text, kb = _run(renewal._show_renewal_list(999002))
-        self.assertIn("خرید مجدد", text)
-        self.assertIn("نامحدود", text)
-        self.assertTrue(len(kb.inline_keyboard), 1)
-
-        with patch.object(renewal, "_fetch_renewable_subs", AsyncMock(return_value=[])), \
-             patch("database.get_active_orders", AsyncMock(return_value=[])):
-            text, _ = _run(renewal._show_renewal_list(999002))
-        self.assertNotIn("نامحدود", text)
+        self.assertIn("سرویس جدید", text)
+        self.assertTrue(kb.inline_keyboard)
 
 
 class ManualLinkDbRoundTripTest(unittest.TestCase):

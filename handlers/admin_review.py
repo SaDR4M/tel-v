@@ -8,6 +8,9 @@ from aiogram.filters import BaseFilter
 import database as db
 from config import settings
 from panel_api import panel, PanelAPIError
+from services.subscriptions.base import SubscriptionError
+from services.subscriptions.provisioning import approve_purchase, approve_renewal
+from services.subscriptions.registry import provider_name_for_plan
 from utils import make_panel_username, safe_edit_caption
 
 router = Router()
@@ -69,6 +72,41 @@ async def cb_admin_approve(callback: CallbackQuery, bot: Bot):
     is_renewal = order.get("order_type") == "renewal"
 
     if is_renewal:
+        target_provider = order.get("target_provider") or (
+            "vip_panel" if order.get("target_panel_username") else None
+        )
+        if target_provider == "dante_api":
+            try:
+                result = await approve_renewal(order, plan)
+            except SubscriptionError as e:
+                await safe_edit_caption(
+                    callback.message,
+                    caption=callback.message.caption
+                    + f"\n\n⚠️ خطای سرویس: {e}",
+                )
+                await callback.answer(
+                    "تمدید سرویس ناموفق بود — خطا را در بالا ببینید.",
+                    show_alert=True,
+                )
+                return
+
+            await bot.send_message(
+                chat_id=telegram_id,
+                text=(
+                    "🎉 <b>تمدید با موفقیت انجام شد!</b>\n\n"
+                    f"پلن جدید: {plan['name']}\n\n"
+                    f"لینک اشتراک شما تغییری نکرده و همچنان معتبر است:\n"
+                    f"<code>{result.user.subscription_url or 'نامشخص'}</code>"
+                ),
+            )
+            await safe_edit_caption(
+                callback.message,
+                caption=callback.message.caption
+                + f"\n\n✅ تمدید شد — سرویس به‌صورت خودکار تمدید شد.",
+            )
+            await callback.answer("تایید شد")
+            return
+
         panel_username = order["target_panel_username"]
         try:
             user_obj = await panel.renew_user(
@@ -115,11 +153,45 @@ async def cb_admin_approve(callback: CallbackQuery, bot: Bot):
         await callback.answer("تایید شد")
         return
     else:
+        provider_name = provider_name_for_plan(plan) if plan else None
+        if provider_name == "dante_api":
+            try:
+                result = await approve_purchase(order, plan)
+            except SubscriptionError as e:
+                await safe_edit_caption(
+                    callback.message,
+                    caption=callback.message.caption
+                    + f"\n\n⚠️ خطای سرویس: {e}",
+                )
+                await callback.answer(
+                    "ایجاد/تمدید سرویس ناموفق بود — خطا را در بالا ببینید.",
+                    show_alert=True,
+                )
+                return
+
+            action = "تمدید شد" if result.extended else "آماده است"
+            await bot.send_message(
+                chat_id=telegram_id,
+                text=(
+                    f"🎉 <b>سرویس شما {action}!</b>\n\n"
+                    f"پلن: {plan['name']}\n\n"
+                    f"لینک اشتراک:\n"
+                    f"<code>{result.user.subscription_url or 'نامشخص'}</code>\n\n"
+                    "برای راهنمای اتصال، /start → 📖 راهنمای استفاده را بزنید."
+                ),
+            )
+            await safe_edit_caption(
+                callback.message,
+                caption=callback.message.caption
+                + f"\n\n✅ تایید شد — سرویس به‌صورت خودکار {action}.",
+            )
+            await callback.answer("تایید شد")
+            return
+
         is_manual = bool(plan and plan.get("manual"))
         if is_manual:
-            # Unlimited tier: no panel account is created here — the admin
-            # builds it manually and delivers the link by replying to this
-            # order message with the subscription URL.
+            # Legacy manual providers: the admin builds the account outside
+            # the bot and delivers the link by replying to this receipt.
             expire_at = datetime.now() + timedelta(days=int(plan["duration_days"]))
             await db.set_order_status(order_id, "approved")
             await db.set_order_expire_at(order_id, expire_at)
@@ -230,7 +302,7 @@ async def receive_manual_link(message: Message, bot: Bot):
     if order["status"] == "pending":
         await message.reply("⚠️ این سفارش هنوز تایید نشده است.")
         return
-    if order.get("panel_username"):
+    if order.get("panel_username") or order.get("provider_user_id"):
         await message.reply("ℹ️ این سفارش خودکار ایجاد شده است و به لینک دستی نیازی ندارد.")
         return
 

@@ -19,6 +19,12 @@ PANEL_BASE_URL = os.getenv("PANEL_BASE_URL", "").rstrip("/")
 PANEL_ADMIN_USERNAME = os.getenv("PANEL_ADMIN_USERNAME", "")
 PANEL_ADMIN_PASSWORD = os.getenv("PANEL_ADMIN_PASSWORD", "")
 
+# DANTE API used by the Unlimited subscription provider.
+DANTE_API_BASE_URL = os.getenv(
+    "DANTE_API_BASE_URL", "https://sadra-aghajanloo.ir/api/v1"
+).rstrip("/")
+DANTE_API_KEY = os.getenv("DANTE_API_KEY", "")
+
 DB_PATH = BASE_DIR / os.getenv("DB_PATH", "data/bot.db")
 SUPPORT_CONTACT = os.getenv("SUPPORT_CONTACT", "@rocket04m")
 APP_NAME = os.getenv("APP_NAME", "Dante")

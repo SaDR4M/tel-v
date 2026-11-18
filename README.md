@@ -24,6 +24,8 @@ Edit `.env`:
 | `ADMIN_USER_IDS` | Comma-separated Telegram user IDs allowed to approve/reject orders and reply to support requests |
 | `PANEL_BASE_URL` | e.g. `https://api.rickpanel.io` |
 | `PANEL_ADMIN_USERNAME` / `PANEL_ADMIN_PASSWORD` | Panel admin credentials (used to fetch an API token) |
+| `DANTE_API_BASE_URL` | Unlimited-plan API base, default `https://sadra-aghajanloo.ir/api/v1` |
+| `DANTE_API_KEY` | Write-scoped Bearer key for the Unlimited API |
 | `SUPPORT_CONTACT` | Shown in the Support menu, e.g. `@yourhandle` |
 | `CELERY_BROKER_URL` | Redis broker for the reminder worker (default `redis://localhost:6379/0`) |
 | `CELERY_RESULT_BACKEND` | Redis result backend (default `redis://localhost:6379/1`) |

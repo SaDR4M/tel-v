@@ -6,6 +6,8 @@ from aiogram.fsm.state import State, StatesGroup
 import database as db
 from config import settings
 from panel_api import panel, PanelAPIError
+from services.subscriptions.base import SubscriptionError
+from services.subscriptions.registry import get_provider
 from handlers.mysub import STATUS_LABELS, _fmt_bytes
 from handlers.keyboards import (
     renewable_subs_keyboard,
@@ -51,6 +53,16 @@ def _needs_renewal(user: dict) -> bool:
     return False
 
 
+def _needs_provider_renewal(user, fallback_expires_at=None) -> bool:
+    if user.status in NEEDS_RENEWAL_STATUSES:
+        return True
+    expires_at = user.expires_at or fallback_expires_at
+    if expires_at:
+        remaining = (expires_at - datetime.now()).total_seconds()
+        return remaining <= RENEWAL_WINDOW_DAYS * 86400
+    return False
+
+
 async def _fetch_renewable_subs(telegram_id: int) -> list[dict]:
     panel_usernames = await db.get_distinct_panel_usernames(telegram_id)
     renewable = []
@@ -70,10 +82,33 @@ async def _fetch_renewable_subs(telegram_id: int) -> list[dict]:
             who = f"«{nickname}»" if nickname else username
             renewable.append(
                 {
+                    "provider": "vip_panel",
+                    "target": username,
                     "panel_username": username,
                     "label": f"{who} — {status_fa} — {used}/{limit}",
                 }
             )
+
+    provider = get_provider("dante_api")
+    for order in await db.get_provider_orders(telegram_id, provider.name):
+        try:
+            user = await provider.get(str(order["provider_user_id"]))
+        except SubscriptionError:
+            continue
+        if not user or not _needs_provider_renewal(
+            user, order.get("expire_at")
+        ):
+            continue
+        nickname = order.get("requested_username") or user.username or "نامحدود"
+        status_fa = STATUS_LABELS.get(user.status, user.status)
+        renewable.append(
+            {
+                "provider": provider.name,
+                "target": str(order["provider_user_id"]),
+                "label": f"«{nickname}» — {status_fa} — نامحدود",
+            }
+        )
+
     # Duplicate nicknames (same buyer, two accounts) get #1/#2 tags so the
     # selection list stays unambiguous; ordering is most-recent-first.
     labels = dedupe_labels([entry["label"] for entry in renewable])
@@ -85,20 +120,11 @@ async def _fetch_renewable_subs(telegram_id: int) -> list[dict]:
 async def _show_renewal_list(telegram_id: int):
     subs = await _fetch_renewable_subs(telegram_id)
     if not subs:
-        text = (
+        return (
             "شما در حال حاضر اشتراکی که نیاز به تمدید داشته باشد ندارید.\n\n"
-            "می‌توانید یک سرویس جدید خریداری کنید:"
+            "می‌توانید یک سرویس جدید خریداری کنید:",
+            no_renewable_subs_keyboard(),
         )
-        # Accounts with no bot-side panel username (unlimited tier) can't
-        # appear above — if the buyer still owns live orders, point their
-        # renewal path out explicitly instead of a generic dead end.
-        orders = await db.get_active_orders(telegram_id=telegram_id)
-        if orders:
-            text += (
-                "\n\n💡 سرویس‌های نامحدود با خرید مجدد همان "
-                "اشتراک تمدید می‌شوند — سفارش جدید بدهید تا سرویس شما ادامه پیدا کند."
-            )
-        return text, no_renewable_subs_keyboard()
 
     text = "🔄 <b>تمدید سرویس</b>\n\nاشتراکی که می‌خواهید تمدید کنید را انتخاب کنید:"
     return text, renewable_subs_keyboard(subs)
@@ -120,12 +146,40 @@ async def cb_menu_renew_menu(callback: CallbackQuery):
 
 @router.callback_query(F.data.startswith("renew_select:"))
 async def cb_renew_select(callback: CallbackQuery, state: FSMContext):
-    panel_username = callback.data.split(":", 1)[1]
-    await state.update_data(target_panel_username=panel_username)
+    parts = callback.data.split(":", 2)
+    if len(parts) == 3:
+        provider, target = parts[1], parts[2]
+    else:
+        # Backwards compatibility for old renewal buttons.
+        provider, target = "vip_panel", parts[1]
+
+    target_label = target
+    if provider == "dante_api":
+        order = await db.get_provider_order_by_user(
+            callback.from_user.id, provider, target
+        )
+        if order:
+            target_label = order.get("requested_username") or target
+        await state.update_data(
+            target_provider=provider,
+            target_provider_user_id=target,
+            target_panel_username=None,
+            target_label=target_label,
+        )
+        heading = "تمدید سرویس نامحدود"
+    else:
+        await state.update_data(
+            target_provider="vip_panel",
+            target_provider_user_id=None,
+            target_panel_username=target,
+            target_label=target_label,
+        )
+        heading = f"تمدید سرویس: {target}"
+
     await safe_edit_text(
         callback.message,
-        f"📋 <b>تمدید سرویس: {panel_username}</b>\n\nیک پلن برای تمدید انتخاب کنید:",
-        reply_markup=renewal_plans_menu(),
+        f"📋 <b>{heading}</b>\n\nیک پلن برای تمدید انتخاب کنید:",
+        reply_markup=renewal_plans_menu(provider),
     )
     await callback.answer()
 
@@ -136,6 +190,12 @@ async def cb_renew_plan(callback: CallbackQuery, state: FSMContext):
     plan = settings.get_plan(plan_id)
     if not plan:
         await callback.answer("پلن یافت نشد.", show_alert=True)
+        return
+
+    data = await state.get_data()
+    target_provider = data.get("target_provider") or "vip_panel"
+    if (plan.get("provider") or "vip_panel") != target_provider:
+        await callback.answer("این پلن برای این سرویس قابل استفاده نیست.", show_alert=True)
         return
 
     await state.update_data(plan_id=plan_id, coupon_code=None)
@@ -250,9 +310,25 @@ async def cb_renewpayflow(callback: CallbackQuery, state: FSMContext):
 async def receive_renewal_receipt(message: Message, state: FSMContext, bot: Bot):
     data = await state.get_data()
     plan_id = data.get("plan_id")
+    target_provider = data.get("target_provider") or "vip_panel"
     target_panel_username = data.get("target_panel_username")
+    target_provider_user_id = data.get("target_provider_user_id")
+    target_label = (
+        data.get("target_label")
+        or target_panel_username
+        or target_provider_user_id
+    )
     plan = settings.get_plan(plan_id)
-    if not plan or not target_panel_username:
+    has_target = (
+        target_panel_username
+        if target_provider == "vip_panel"
+        else target_provider_user_id
+    )
+    if (
+        not plan
+        or not has_target
+        or (plan.get("provider") or "vip_panel") != target_provider
+    ):
         await message.answer("مشکلی پیش آمد، لطفاً دوباره با /start شروع کنید.")
         await state.clear()
         return
@@ -270,11 +346,13 @@ async def receive_renewal_receipt(message: Message, state: FSMContext, bot: Bot)
         telegram_id=message.from_user.id,
         telegram_username=message.from_user.username,
         plan_id=plan_id,
-        requested_username=target_panel_username,
+        requested_username=target_label,
         receipt_file_id=file_id,
         expire_at=expire_at,
         order_type="renewal",
         target_panel_username=target_panel_username,
+        target_provider=target_provider,
+        target_provider_user_id=target_provider_user_id,
         coupon_code=coupon_code,
         final_price=final_price,
     )
@@ -288,7 +366,7 @@ async def receive_renewal_receipt(message: Message, state: FSMContext, bot: Bot)
     caption = (
         f"🔄 <b>درخواست تمدید #{order_id}</b>\n"
         f"کاربر: {uname} (شناسه: <code>{message.from_user.id}</code>)\n"
-        f"سرویس مورد تمدید: <code>{target_panel_username}</code>\n"
+        f"سرویس مورد تمدید: <code>{target_label}</code>\n"
         f"پلن: {plan['name']} — {plan['price']} {settings.CURRENCY}"
         f"{coupon_line}"
     )

@@ -51,9 +51,9 @@
     "id": "plan_u_300gb",
     "name": "نامحدود — 2 کاربر / 30 روز",
     "price": "150000",
-    "data_limit_bytes": 322122547200,
+    "data_limit_bytes": 0,
     "duration_days": 30,
     "tier": "unlimited",
-    "manual": true
+    "provider": "dante_api"
   }
 ]
