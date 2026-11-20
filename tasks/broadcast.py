@@ -6,8 +6,8 @@ from aiogram import Bot
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from aiogram.exceptions import TelegramRetryAfter
-from celery import shared_task
 
+from app.celery_app import celery_app
 from config import settings
 
 logger = logging.getLogger(__name__)
@@ -48,6 +48,6 @@ async def _send_all(recipients: list[int], text: str, admin_chat_id: int) -> dic
     return {"sent": sent, "failed": failed}
 
 
-@shared_task(soft_time_limit=1800, time_limit=1900)
+@celery_app.task(soft_time_limit=1800, time_limit=1900)
 def send_broadcast(recipients: list[int], text: str, admin_chat_id: int) -> dict:
     return asyncio.run(_send_all(recipients, text, admin_chat_id))
