@@ -9,7 +9,17 @@ from aiogram.types import BotCommand
 
 from config import settings
 import database as db
-from handlers import menu, purchase, admin_review, mysub, docs_support, test_plan, renewal, admin
+from handlers import (
+    menu,
+    purchase,
+    admin_review,
+    mysub,
+    docs_support,
+    test_plan,
+    renewal,
+    admin,
+    broadcast,
+)
 from middlewares import CancelStaleStateMiddleware
 
 import psutil
@@ -56,6 +66,7 @@ async def server():
     dp.include_router(test_plan.router)
     dp.include_router(renewal.router)
     dp.include_router(admin.router)
+    dp.include_router(broadcast.router)
 
     await bot.delete_webhook(drop_pending_updates=True)
     await dp.start_polling(bot)

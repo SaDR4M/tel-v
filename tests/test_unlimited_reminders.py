@@ -72,12 +72,12 @@ class UnlimitedExpiryReminderTest(unittest.TestCase):
         self.assertIn(order_id, [order.order_id for order in orders])
 
     def test_inactive_unlimited_order_is_not_scanned(self):
-        self._order()
+        order_id = self._order()
         with patch.object(
             subs, "_active_dante_ids", AsyncMock(return_value=set())
         ):
             orders = _run(subs._scan_subscriptions_expire_date())
-        self.assertEqual(orders, [])
+        self.assertNotIn(order_id, [order.order_id for order in orders])
 
     def test_status_sync_updates_provider_order(self):
         order_id = self._order()

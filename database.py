@@ -388,6 +388,64 @@ async def has_used_plan(telegram_id: int, plan_id: str) -> bool:
         return result.first() is not None
 
 
+async def get_all_telegram_ids() -> list[int]:
+    """Every user the bot knows about (users table plus order owners)."""
+    async with SessionLocal() as session:
+        result = await session.execute(
+            select(User.telegram_id).union(select(Order.telegram_id))
+        )
+        return sorted(int(row[0]) for row in result.all() if row[0] is not None)
+
+
+async def get_active_telegram_ids_for_plan(plan_id: str) -> list[int]:
+    """Distinct users with a currently active order for one plan."""
+    async with SessionLocal() as session:
+        result = await session.execute(
+            select(Order.telegram_id)
+            .where(
+                Order.plan_id == plan_id,
+                Order.status.in_((OrderStatus.ACTIVE, OrderStatus.APPROVED)),
+                Order.expire_at > datetime.now(),
+                Order.superseded_at.is_(None),
+            )
+            .distinct()
+            .order_by(Order.telegram_id)
+        )
+        return [int(row[0]) for row in result.all()]
+
+
+async def count_active_users_by_plan() -> dict[str, int]:
+    """Active distinct-user count per plan, for the broadcast audience menu."""
+    async with SessionLocal() as session:
+        result = await session.execute(
+            select(
+                Order.plan_id,
+                func.count(Order.telegram_id.distinct()),
+            )
+            .where(
+                Order.status.in_((OrderStatus.ACTIVE, OrderStatus.APPROVED)),
+                Order.expire_at > datetime.now(),
+                Order.superseded_at.is_(None),
+            )
+            .group_by(Order.plan_id)
+        )
+        return {plan_id: int(count) for plan_id, count in result.all()}
+
+
+async def find_telegram_id_by_username(username: str) -> int | None:
+    username = (username or "").lstrip("@").strip().lower()
+    if not username:
+        return None
+    async with SessionLocal() as session:
+        result = await session.execute(
+            select(User.telegram_id)
+            .where(func.lower(User.telegram_username) == username)
+            .limit(1)
+        )
+        row = result.first()
+        return int(row[0]) if row and row[0] is not None else None
+
+
 async def get_active_orders(telegram_id: int) -> list[dict]:
     """Returns this user's provisioned + not-yet-expired orders (i.e.
     subscriptions that were actually created on the panel), most recent

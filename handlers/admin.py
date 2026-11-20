@@ -33,6 +33,7 @@ def _admin_menu():
     b.button(text="🧭 وضعیت سفارش‌ها", callback_data="admin:funnel")
     b.button(text="👥 فروش به تفکیک خریدار", callback_data="admin:buyers")
     b.button(text="📊 وضعیت داده پنل", callback_data="admin:panel")
+    b.button(text="📢 ارسال پیام", callback_data="broadcast:home")
     b.adjust(1)
     return b.as_markup()
 

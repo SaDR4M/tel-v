@@ -8,7 +8,7 @@ celery_app = Celery(
     "subscriptions_tasks",
     broker=settings.CELERY_BROKER_URL,
     backend=settings.CELERY_RESULT_BACKEND,
-    include=["tasks.subs"]
+    include=["tasks.subs", "tasks.broadcast"]
 )
 
 celery_app.conf.enable_utc = True
