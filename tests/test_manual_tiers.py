@@ -62,16 +62,15 @@ class TierMenusTest(unittest.TestCase):
 
     def test_tier_info_marketing_copy(self):
         # Every offered tier has an info text; the unlimited one presents the
-        # single 2-user version and location caption (caps are NOT shown per
-        # marketing decision), plus the overuse quality warning.
+        # current location caption (caps are NOT shown per marketing decision),
+        # plus the overuse quality warning.
         tiers_present = {p.get("tier", "vip") for p in settings.PLANS}
         for tier in tiers_present:
             self.assertIn(tier, keyboards.TIER_INFO)
         info = keyboards.TIER_INFO["unlimited"]
-        self.assertIn("یک نسخه: 2 کاربره", info)
-        self.assertNotIn("3 کاربره", info)
         self.assertIn("ONE LOCATION", info)
-        self.assertIn("USA", info)
+        self.assertIn("DE", info)
+        self.assertNotIn("3 کاربره", info)
         self.assertNotIn("گیگ", info)   # caps deliberately hidden
         self.assertIn("افت کیفیت", info)
 
