@@ -9,5 +9,9 @@
   {
     "code": "AVAL",
     "toman_per_gb": 4500
+  },
+  {
+    "code": "BLACK",
+    "percent_off": 10
   }
 ]

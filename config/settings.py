@@ -78,8 +78,9 @@ def coupon_price(plan: dict, coupon: dict) -> int | None:
     cannot apply (bad rate, or the plan has no data cap to price against).
 
     A matching ``plan_prices`` entry is a fixed final price and takes priority
-    over per-GB pricing. Either way the coupon never makes an order more
-    expensive than the list price.
+    over percentage/per-GB pricing. A ``percent_off`` value applies a
+    percentage discount to every plan. Either way the coupon never makes an
+    order more expensive than the list price.
     """
     list_price = int(plan["price"])
     fixed_prices = coupon.get("plan_prices") or {}
@@ -89,6 +90,16 @@ def coupon_price(plan: dict, coupon: dict) -> int | None:
         except (TypeError, ValueError):
             return None
         return min(list_price, fixed) if fixed > 0 else None
+
+    percent_off = coupon.get("percent_off")
+    if percent_off is not None:
+        try:
+            percent_off = float(percent_off)
+        except (TypeError, ValueError):
+            return None
+        if not 0 < percent_off < 100:
+            return None
+        return max(0, int(round(list_price * (100 - percent_off) / 100)))
 
     rate = int(coupon.get("toman_per_gb") or 0)
     data_limit = int(plan.get("data_limit_bytes") or 0)
